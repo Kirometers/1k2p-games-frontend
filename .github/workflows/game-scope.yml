@@ -1,0 +1,21 @@
+name: Game scope check
+
+on:
+  pull_request:
+
+jobs:
+  game-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify game scope
+        run: node scripts/check-game-scope.js
