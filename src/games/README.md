@@ -18,3 +18,8 @@ Add your game metadata in `game.ts`. The hub auto-loads it via
 
 `index.tsx` should export a default React component. It is loaded automatically
 when users enter `/games/<game-id>` from the hub.
+
+Metadata tips:
+
+- `status` must be `open`, `prototype`, or `planned`.
+- For hub text, you can use localized strings: `{ en: '...', ko: '...' }`.

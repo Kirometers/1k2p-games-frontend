@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Suspense, lazy, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import {
   AppLayout,
   Box,
@@ -15,24 +15,164 @@ import {
   TopNavigation,
 } from '@cloudscape-design/components'
 import { Route, Routes, useNavigate, useParams } from 'react-router-dom'
-import { games, getGameLoader } from './games/registry'
+import {
+  games,
+  getGameLoader,
+  resolveLocaleString,
+  type GameStatus,
+  type Locale,
+} from './games/registry'
 
-const statusMap: Record<string, 'success' | 'info' | 'pending'> = {
-  Open: 'success',
-  Prototype: 'info',
-  Planned: 'pending',
+const statusMap: Record<GameStatus, 'success' | 'info' | 'pending'> = {
+  open: 'success',
+  prototype: 'info',
+  planned: 'pending',
 }
+
+const statusLabels: Record<Locale, Record<GameStatus, string>> = {
+  en: {
+    open: 'Open',
+    prototype: 'Prototype',
+    planned: 'Planned',
+  },
+  ko: {
+    open: '오픈',
+    prototype: '프로토타입',
+    planned: '계획',
+  },
+}
+
+const copy = {
+  en: {
+    navTitle: '1k2p Cloudspace',
+    navGames: 'Games',
+    navCreators: 'Creators',
+    navRoadmap: 'Roadmap',
+    navSubmit: 'Submit a game',
+    navGuide: 'Contribution guide',
+    language: 'Language',
+    languageNames: { ko: 'Korean', en: 'English' },
+    tagline: 'one kill 2 players',
+    heroTitle: '1k2p mini games',
+    heroBody:
+      'Pick a sky lane, drop into a match, and rack up double eliminations. New mini games land through developer PRs and are curated for quick chaos.',
+    heroPrimary: 'Pick a game',
+    heroSecondary: 'How it works',
+    statsQueued: 'Mini games queued',
+    statsPlayers: 'Players per match',
+    statsSession: 'Average session',
+    cardsTitle: 'Pick a mini game',
+    cardsDescription: 'Built for fast runs and sudden comebacks.',
+    cardsMode: 'Mode',
+    cardsStatus: 'Status',
+    cardsDescriptionLabel: 'Description',
+    cardsEnterLobby: 'Enter lobby',
+    emptyGames: 'No games yet. Submit a new mini game PR to populate the list.',
+    loadingGames: 'Loading games',
+    creatorsTitle: 'Creator portal',
+    creatorsBody:
+      '1k2p is a rotating hub. Drop in a new game via PR, follow the starter template, and we will surface it on the cloudspace deck.',
+    creatorsStep1Label: 'Step 1',
+    creatorsStep1Body: 'Clone the base mini game template.',
+    creatorsStep2Label: 'Step 2',
+    creatorsStep2Body: 'Wire up matchmaking and session hooks.',
+    creatorsStep3Label: 'Step 3',
+    creatorsStep3Body: 'Open a PR with demo footage.',
+    creatorsCta: 'Read the contribution guide',
+    roadmapTitle: 'Roadmap',
+    roadmapSubtitle: 'Next in the sky',
+    roadmapItems: [
+      'Seasonal cloudspace skins',
+      'Match replay clips',
+      'Creator spotlight banners',
+      'Weekly duel ladders',
+    ],
+    gameNotFound: 'Game not found',
+    backToHub: 'Back to hub',
+    startGame: 'Start game',
+    loadingGame: 'Loading game',
+    missingGameEntry:
+      'This game does not exist yet or is missing an entrypoint at',
+  },
+  ko: {
+    navTitle: '1k2p 클라우드스페이스',
+    navGames: '게임',
+    navCreators: '크리에이터',
+    navRoadmap: '로드맵',
+    navSubmit: '게임 제출',
+    navGuide: '기여 가이드',
+    language: '언어',
+    languageNames: { ko: '한국어', en: 'English' },
+    tagline: 'one kill 2 players',
+    heroTitle: '1k2p 미니게임',
+    heroBody:
+      '하늘 레인에 드롭해 매치에 들어가고 더블 킬을 쌓아라. 새로운 미니게임은 개발자 PR로 추가되며 빠른 전투를 위해 큐레이션된다.',
+    heroPrimary: '게임 고르기',
+    heroSecondary: '진행 방식',
+    statsQueued: '대기 중 미니게임',
+    statsPlayers: '매치 인원',
+    statsSession: '평균 플레이',
+    cardsTitle: '미니게임 선택',
+    cardsDescription: '빠른 전개와 역전을 위한 구성.',
+    cardsMode: '모드',
+    cardsStatus: '상태',
+    cardsDescriptionLabel: '설명',
+    cardsEnterLobby: '로비 입장',
+    emptyGames: '아직 등록된 게임이 없습니다. 새 미니게임 PR을 올려주세요.',
+    loadingGames: '게임 불러오는 중',
+    creatorsTitle: '크리에이터 포털',
+    creatorsBody:
+      '1k2p는 순환형 허브다. 새 게임을 PR로 추가하고 템플릿을 따르면 클라우드스페이스 덱에 노출된다.',
+    creatorsStep1Label: '1단계',
+    creatorsStep1Body: '베이스 미니게임 템플릿을 클론한다.',
+    creatorsStep2Label: '2단계',
+    creatorsStep2Body: '매치메이킹과 세션 훅을 연결한다.',
+    creatorsStep3Label: '3단계',
+    creatorsStep3Body: '데모 영상과 함께 PR을 연다.',
+    creatorsCta: '기여 가이드 읽기',
+    roadmapTitle: '로드맵',
+    roadmapSubtitle: '다음 업데이트',
+    roadmapItems: [
+      '시즌 클라우드스페이스 스킨',
+      '매치 리플레이 클립',
+      '크리에이터 스포트라이트 배너',
+      '주간 듀얼 래더',
+    ],
+    gameNotFound: '게임을 찾을 수 없습니다',
+    backToHub: '허브로 돌아가기',
+    startGame: '게임 시작',
+    loadingGame: '게임 불러오는 중',
+    missingGameEntry:
+      '이 게임이 아직 없거나 다음 엔트리포인트가 없습니다:',
+  },
+} as const
+
+type Copy = (typeof copy)['en']
 
 function App() {
   const [navigationOpen, setNavigationOpen] = useState(false)
+  const [locale, setLocale] = useState<Locale>(() => {
+    const stored = localStorage.getItem('1k2p-locale')
+    if (stored === 'ko' || stored === 'en') {
+      return stored
+    }
+    const browserLocale = navigator.language.toLowerCase()
+    return browserLocale.startsWith('ko') ? 'ko' : 'en'
+  })
+  const t = copy[locale]
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+    localStorage.setItem('1k2p-locale', locale)
+  }, [locale])
 
   const navigation = (
     <SideNavigation
-      header={{ href: '/', text: '1k2p Cloudspace' }}
+      header={{ href: '/', text: t.navTitle }}
       items={[
-        { type: 'link', text: 'Games', href: '/#games' },
-        { type: 'link', text: 'Creators', href: '/#creators' },
-        { type: 'link', text: 'Roadmap', href: '/#roadmap' },
+        { type: 'link', text: t.navGames, href: '/#games' },
+        { type: 'link', text: t.navCreators, href: '/#creators' },
+        { type: 'link', text: t.navRoadmap, href: '/#roadmap' },
       ]}
     />
   )
@@ -44,13 +184,22 @@ function App() {
           identity={{ title: '1k2p', href: '/' }}
           utilities={[
             {
+              type: 'menu-dropdown',
+              text: `${t.language}: ${t.languageNames[locale]}`,
+              items: [
+                { id: 'ko', text: t.languageNames.ko },
+                { id: 'en', text: t.languageNames.en },
+              ],
+              onItemClick: ({ detail }) => setLocale(detail.id as Locale),
+            },
+            {
               type: 'link',
-              text: 'Submit a game',
+              text: t.navSubmit,
               href: '/#creators',
             },
             {
               type: 'link',
-              text: 'Contribution guide',
+              text: t.navGuide,
               href: '/#creators',
             },
           ]}
@@ -65,6 +214,8 @@ function App() {
               navigation={navigation}
               navigationOpen={navigationOpen}
               onNavigationChange={setNavigationOpen}
+              locale={locale}
+              t={t}
             />
           }
         />
@@ -75,6 +226,8 @@ function App() {
               navigation={navigation}
               navigationOpen={navigationOpen}
               onNavigationChange={setNavigationOpen}
+              locale={locale}
+              t={t}
             />
           }
         />
@@ -87,9 +240,11 @@ type PageProps = {
   navigation: ReactNode
   navigationOpen: boolean
   onNavigationChange: (open: boolean) => void
+  locale: Locale
+  t: Copy
 }
 
-function HubPage({ navigation, navigationOpen, onNavigationChange }: PageProps) {
+function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: PageProps) {
   const navigate = useNavigate()
 
   return (
@@ -102,34 +257,31 @@ function HubPage({ navigation, navigationOpen, onNavigationChange }: PageProps) 
         <ContentLayout
           header={
             <SpaceBetween size="m">
-              <Header variant="h1" description="one kill 2 players">
-                1k2p mini games
+              <Header variant="h1" description={t.tagline}>
+                {t.heroTitle}
               </Header>
-              <Box color="text-body-secondary">
-                Pick a sky lane, drop into a match, and rack up double eliminations. New mini games land
-                through developer PRs and are curated for quick chaos.
-              </Box>
+              <Box color="text-body-secondary">{t.heroBody}</Box>
               <SpaceBetween size="m" direction="horizontal">
-                <Button variant="primary">Pick a game</Button>
-                <Button>How it works</Button>
+                <Button variant="primary">{t.heroPrimary}</Button>
+                <Button>{t.heroSecondary}</Button>
               </SpaceBetween>
               <Container>
                 <ColumnLayout columns={3} variant="text-grid">
                   <SpaceBetween size="xs">
                     <Box variant="small" color="text-body-secondary">
-                      Mini games queued
+                      {t.statsQueued}
                     </Box>
-                    <Box variant="h2">6</Box>
+                    <Box variant="h2">{games.length}</Box>
                   </SpaceBetween>
                   <SpaceBetween size="xs">
                     <Box variant="small" color="text-body-secondary">
-                      Players per match
+                      {t.statsPlayers}
                     </Box>
                     <Box variant="h2">2-4</Box>
                   </SpaceBetween>
                   <SpaceBetween size="xs">
                     <Box variant="small" color="text-body-secondary">
-                      Average session
+                      {t.statsSession}
                     </Box>
                     <Box variant="h2">90s</Box>
                   </SpaceBetween>
@@ -140,93 +292,87 @@ function HubPage({ navigation, navigationOpen, onNavigationChange }: PageProps) 
         >
           <SpaceBetween size="l">
             <Container
-              header={
-                <Header variant="h2" description="Built for fast runs and sudden comebacks.">
-                  Pick a mini game
-                </Header>
-              }
+              header={<Header variant="h2" description={t.cardsDescription}>{t.cardsTitle}</Header>}
             >
               <Cards
                 cardDefinition={{
-                  header: (item) => item.title,
+                  header: (item) => resolveLocaleString(item.title, locale),
                   sections: [
                     {
                       id: 'mode',
-                      header: 'Mode',
-                      content: (item) => item.mode,
+                      header: t.cardsMode,
+                      content: (item) => resolveLocaleString(item.mode, locale),
                     },
                     {
                       id: 'status',
-                      header: 'Status',
+                      header: t.cardsStatus,
                       content: (item) => (
                         <StatusIndicator type={statusMap[item.status] ?? 'info'}>
-                          {item.status}
+                          {statusLabels[locale][item.status]}
                         </StatusIndicator>
                       ),
                     },
                     {
                       id: 'description',
-                      header: 'Description',
-                      content: (item) => item.description,
+                      header: t.cardsDescriptionLabel,
+                      content: (item) => resolveLocaleString(item.description, locale),
                     },
                     {
                       id: 'actions',
                       content: (item) => (
-                        <Button onClick={() => navigate(`/games/${item.id}`)}>Enter lobby</Button>
+                        <Button onClick={() => navigate(`/games/${item.id}`)}>
+                          {t.cardsEnterLobby}
+                        </Button>
                       ),
                     },
                   ],
                 }}
                 cardsPerRow={[{ cards: 1 }, { minWidth: 500, cards: 2 }, { minWidth: 900, cards: 3 }]}
                 items={games}
-                loadingText="Loading games"
+                loadingText={t.loadingGames}
                 trackBy="id"
                 empty={
                   <Box textAlign="center" color="text-body-secondary">
-                    No games yet. Submit a new mini game PR to populate the list.
+                    {t.emptyGames}
                   </Box>
                 }
               />
             </Container>
 
-            <Container id="creators" header={<Header variant="h2">Creator portal</Header>}>
+            <Container id="creators" header={<Header variant="h2">{t.creatorsTitle}</Header>}>
               <SpaceBetween size="l">
-                <Box>
-                  1k2p is a rotating hub. Drop in a new game via PR, follow the starter template, and we
-                  will surface it on the cloudspace deck.
-                </Box>
+                <Box>{t.creatorsBody}</Box>
                 <ColumnLayout columns={3} variant="text-grid">
                   <SpaceBetween size="xs">
                     <Box variant="small" color="text-body-secondary">
-                      Step 1
+                      {t.creatorsStep1Label}
                     </Box>
-                    <Box>Clone the base mini game template.</Box>
+                    <Box>{t.creatorsStep1Body}</Box>
                   </SpaceBetween>
                   <SpaceBetween size="xs">
                     <Box variant="small" color="text-body-secondary">
-                      Step 2
+                      {t.creatorsStep2Label}
                     </Box>
-                    <Box>Wire up matchmaking and session hooks.</Box>
+                    <Box>{t.creatorsStep2Body}</Box>
                   </SpaceBetween>
                   <SpaceBetween size="xs">
                     <Box variant="small" color="text-body-secondary">
-                      Step 3
+                      {t.creatorsStep3Label}
                     </Box>
-                    <Box>Open a PR with demo footage.</Box>
+                    <Box>{t.creatorsStep3Body}</Box>
                   </SpaceBetween>
                 </ColumnLayout>
-                <Button variant="primary">Read the contribution guide</Button>
+                <Button variant="primary">{t.creatorsCta}</Button>
               </SpaceBetween>
             </Container>
 
-            <Container id="roadmap" header={<Header variant="h2">Roadmap</Header>}>
+            <Container id="roadmap" header={<Header variant="h2">{t.roadmapTitle}</Header>}>
               <SpaceBetween size="s">
-                <Box variant="h3">Next in the sky</Box>
+                <Box variant="h3">{t.roadmapSubtitle}</Box>
                 <Box component="ul" padding={{ left: 'l' }}>
-                  <li>Seasonal cloudspace skins</li>
-                  <li>Match replay clips</li>
-                  <li>Creator spotlight banners</li>
-                  <li>Weekly duel ladders</li>
+                  {t.roadmapItems.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
                 </Box>
               </SpaceBetween>
             </Container>
@@ -238,12 +384,13 @@ function HubPage({ navigation, navigationOpen, onNavigationChange }: PageProps) 
   )
 }
 
-function GamePage({ navigation, navigationOpen, onNavigationChange }: PageProps) {
+function GamePage({ navigation, navigationOpen, onNavigationChange, locale, t }: PageProps) {
   const navigate = useNavigate()
   const { gameId } = useParams()
   const game = games.find((item) => item.id === gameId)
   const loader = gameId ? getGameLoader(gameId) : undefined
   const GameComponent = useMemo(() => (loader ? lazy(loader) : null), [loader])
+  const gameTitle = game ? resolveLocaleString(game.title, locale) : t.gameNotFound
 
   return (
     <AppLayout
@@ -255,10 +402,10 @@ function GamePage({ navigation, navigationOpen, onNavigationChange }: PageProps)
         <ContentLayout
           header={
             <SpaceBetween size="m">
-              <Header variant="h1">{game ? game.title : 'Game not found'}</Header>
+              <Header variant="h1">{gameTitle}</Header>
               <SpaceBetween size="m" direction="horizontal">
-                <Button onClick={() => navigate('/')}>Back to hub</Button>
-                {game ? <Button variant="primary">Start game</Button> : null}
+                <Button onClick={() => navigate('/')}>{t.backToHub}</Button>
+                {game ? <Button variant="primary">{t.startGame}</Button> : null}
               </SpaceBetween>
             </SpaceBetween>
           }
@@ -267,15 +414,14 @@ function GamePage({ navigation, navigationOpen, onNavigationChange }: PageProps)
             {game && GameComponent ? (
               <Suspense
                 fallback={
-                  <StatusIndicator type="loading">Loading game</StatusIndicator>
+                  <StatusIndicator type="loading">{t.loadingGame}</StatusIndicator>
                 }
               >
                 <GameComponent />
               </Suspense>
             ) : (
               <Box color="text-body-secondary">
-                This game does not exist yet or is missing an entrypoint at{' '}
-                <code>src/games/{gameId}/index.tsx</code>.
+                {t.missingGameEntry} <code>src/games/{gameId}/index.tsx</code>.
               </Box>
             )}
           </Container>
