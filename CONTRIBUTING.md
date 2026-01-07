@@ -30,6 +30,7 @@ These rules keep the Cloudscape look intact and prevent cross-team conflicts.
    - Export a default object that matches `GameMeta`.
    - Keep `id` stable and URL-safe (kebab-case).
    - Keep `status` to one of: Open, Prototype, Planned.
+   - Export a default React component from `index.tsx` for the game route.
 
 4. Keep PRs reviewable
    - One game per PR.
@@ -70,7 +71,8 @@ src/games/<game-id>/
   assets/
 ```
 
-`src/games/registry.ts` auto-loads each game's `game.ts`.
+`src/games/registry.ts` auto-loads each game's `game.ts`. The hub routes
+`/games/<game-id>` directly to your `index.tsx` component.
 
 ## Game integration expectations
 

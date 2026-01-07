@@ -15,3 +15,6 @@ src/games/<game-id>/
 
 Add your game metadata in `game.ts`. The hub auto-loads it via
 `import.meta.glob`.
+
+`index.tsx` should export a default React component. It is loaded automatically
+when users enter `/games/<game-id>` from the hub.
