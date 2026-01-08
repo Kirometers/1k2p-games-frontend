@@ -1,7 +1,7 @@
 import type { GameMeta } from '../registry'
 
-import thumbnail from './thumbnail.png'
-import heroImage from './game_title_image.png'
+import thumbnail from './assets/thumbnail.png'
+import heroImage from './assets/game_title_image.png'
 
 const game: GameMeta = {
   id: 'ten-exorcism',

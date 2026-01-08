@@ -4,10 +4,10 @@ import { BOARD_COLS, BOARD_ROWS } from './types'
 import './styles.css'
 
 // Import images
-import ghostImage from './single_ghost_crop.png'
-import ghostScoreImage from './ghost_score.png'
-import titleImage from './game_title_image.png'
-import backgroundImage from './game_background.png'
+import ghostImage from './assets/single_ghost_crop.png'
+import ghostScoreImage from './assets/ghost_score.png'
+import titleImage from './assets/game_title_image.png'
+import backgroundImage from './assets/game_background.png'
 
 export default function TenExorcism() {
   const {
