@@ -23,3 +23,5 @@ Metadata tips:
 
 - `status` must be `open`, `prototype`, or `planned`.
 - For hub text, you can use localized strings: `{ en: '...', ko: '...' }`.
+- `thumbnail` can be a square image URL or asset path for the hub card.
+- `heroImage` can be a wide image URL or asset path shown under the card header.

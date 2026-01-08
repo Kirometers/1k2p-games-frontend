@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#c7d2fe" />
+      <stop offset="100%" stop-color="#fef3c7" />
+    </linearGradient>
+    <radialGradient id="glow" cx="30%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)" />
+  <circle cx="380" cy="240" r="260" fill="url(#glow)" />
+  <rect x="120" y="140" width="1040" height="440" rx="40" fill="#ffffff" fill-opacity="0.18" />
+  <text x="80" y="140" font-family="Open Sans, Arial, sans-serif" font-size="40" fill="#1e293b">Halo Relay</text>
+  <text x="80" y="200" font-family="Open Sans, Arial, sans-serif" font-size="22" fill="#334155">Cloudspace practice bay</text>
+  <g transform="translate(760 260)">
+    <circle cx="0" cy="0" r="120" fill="#ffffff" fill-opacity="0.45" />
+    <circle cx="0" cy="0" r="92" fill="#ffffff" fill-opacity="0.2" />
+    <circle cx="0" cy="0" r="70" fill="#ffffff" fill-opacity="0.2" />
+  </g>
+</svg>
