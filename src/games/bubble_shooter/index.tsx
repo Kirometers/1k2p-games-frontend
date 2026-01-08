@@ -72,6 +72,15 @@ export default function BubbleShooter() {
   const [gameOver, setGameOver] = useState(false)
   const [timeLeft, setTimeLeft] = useState(WALL_DESCENT_INTERVAL_MS / 1000)
   
+  // 엔딩 화면을 위한 상태
+  const [gameResult, setGameResult] = useState<{
+    isClear: boolean
+    starCount: number
+    totalBubbles: number
+    clearedBubbles: number
+    finalScore: number
+  } | null>(null)
+  
   // 게임 상태
   const gameStateRef = useRef({
     bubbles: [] as Bubble[],
@@ -91,7 +100,10 @@ export default function BubbleShooter() {
     imageLoaded: false,
     // 애니메이션 상태
     popParticles: [] as PopParticle[],
-    fallingBubbles: [] as FallingBubble[]
+    fallingBubbles: [] as FallingBubble[],
+    // 엔딩 계산용 상태
+    totalBubbles: 0,      // 스테이지 시작 시 총 버블 수
+    clearedBubbles: 0     // 제거된 버블 수
   })
 
   // 버블 배열 불변성 검증 헬퍼 함수들 (강화된 버전)
@@ -236,6 +248,8 @@ export default function BubbleShooter() {
     state.nextBubble = null
     state.trajectory = null
     state.bubbleIdCounter = 0
+    state.totalBubbles = 0
+    state.clearedBubbles = 0
     
     // 애니메이션 상태 초기화
     state.popParticles = []
@@ -245,6 +259,7 @@ export default function BubbleShooter() {
     setScore(0)
     setGameRunning(true)
     setGameOver(false)
+    setGameResult(null)
     setTimeLeft(WALL_DESCENT_INTERVAL_MS / 1000)
     
     // 모든 타이머 정리
@@ -395,7 +410,11 @@ export default function BubbleShooter() {
       }
     }
     
-    console.log(`[DEV] 🎮 초기 버블 생성 완료: ${state.bubbles.length}개`)
+    // 초기 버블 수 저장 (벽 블록 제외)
+    state.totalBubbles = state.bubbles.filter(bubble => !bubble.isWall).length
+    state.clearedBubbles = 0
+    
+    console.log(`[DEV] 🎮 초기 버블 생성 완료: ${state.bubbles.length}개 (일반 버블: ${state.totalBubbles}개)`)
     
     // 초기 버블들의 렌더링 위치 검증
     console.log(`[DEV] 🎮 초기 버블 렌더링 위치 검증:`)
@@ -485,176 +504,281 @@ export default function BubbleShooter() {
     
     if (!state.currentBubble?.moving) return
     
-    // 버블 이동
-    state.currentBubble.x += state.currentBubble.dx
-    state.currentBubble.y += state.currentBubble.dy
+    // 현재 속도 계산
+    const speed = Math.sqrt(
+      Math.pow(state.currentBubble.dx, 2) + 
+      Math.pow(state.currentBubble.dy, 2)
+    )
     
-    // 벽 충돌 처리
-    if (state.currentBubble.x <= BUBBLE_RADIUS || 
-        state.currentBubble.x >= 500 - BUBBLE_RADIUS) {
-      state.currentBubble.dx = -state.currentBubble.dx
+    console.log(`[DEV] 🚀 버블 업데이트: 속도=${speed.toFixed(2)}, 위치=(${state.currentBubble.x.toFixed(1)}, ${state.currentBubble.y.toFixed(1)})`)
+    
+    // 서브스텝 계산 (빠른 이동 시 여러 번으로 나누기)
+    const maxMovePerStep = BUBBLE_RADIUS * 0.8 // 조금 더 큰 스텝 허용
+    const frameMoveDistance = speed
+    const subSteps = Math.max(1, Math.ceil(frameMoveDistance / maxMovePerStep))
+    
+    let subStepDx = state.currentBubble.dx / subSteps
+    let subStepDy = state.currentBubble.dy / subSteps
+    
+    if (subSteps > 1) {
+      console.log(`[DEV] 🔄 서브스텝 적용: 프레임거리=${frameMoveDistance.toFixed(1)}, 서브스텝=${subSteps}개, 스텝당거리=${(frameMoveDistance/subSteps).toFixed(1)}`)
     }
     
-    // 천장에 닿으면 붙이기
-    if (state.currentBubble.y <= BUBBLE_RADIUS + 2) {
+    // 서브스텝으로 이동 및 충돌 검사
+    for (let step = 0; step < subSteps; step++) {
+      const prevX = state.currentBubble.x
+      const prevY = state.currentBubble.y
+      
+      // 서브스텝 이동
+      state.currentBubble.x += subStepDx
+      state.currentBubble.y += subStepDy
+      
+      const stepDistance = Math.sqrt(subStepDx * subStepDx + subStepDy * subStepDy)
+      
+      console.log(`[DEV] 🔄 서브스텝 ${step + 1}/${subSteps}: (${prevX.toFixed(1)}, ${prevY.toFixed(1)}) → (${state.currentBubble.x.toFixed(1)}, ${state.currentBubble.y.toFixed(1)}), 거리=${stepDistance.toFixed(1)}`)
+      
+      // 벽 충돌 처리 (서브스텝마다 체크)
+      let wallBounced = false
+      if (state.currentBubble.x <= BUBBLE_RADIUS) {
+        state.currentBubble.x = BUBBLE_RADIUS
+        state.currentBubble.dx = -state.currentBubble.dx
+        wallBounced = true
+        console.log(`[DEV] 🏀 좌측 벽 반사: 새 방향=(${state.currentBubble.dx.toFixed(1)}, ${state.currentBubble.dy.toFixed(1)})`)
+      } else if (state.currentBubble.x >= 500 - BUBBLE_RADIUS) {
+        state.currentBubble.x = 500 - BUBBLE_RADIUS
+        state.currentBubble.dx = -state.currentBubble.dx
+        wallBounced = true
+        console.log(`[DEV] 🏀 우측 벽 반사: 새 방향=(${state.currentBubble.dx.toFixed(1)}, ${state.currentBubble.dy.toFixed(1)})`)
+      }
+      
+      // 벽 반사 후 남은 서브스텝들의 이동량 재계산
+      if (wallBounced && step < subSteps - 1) {
+        subStepDx = state.currentBubble.dx / subSteps
+        subStepDy = state.currentBubble.dy / subSteps
+        console.log(`[DEV] 🏀 벽 반사 후 서브스텝 재계산: 새 스텝당 이동=(${subStepDx.toFixed(1)}, ${subStepDy.toFixed(1)})`)
+      }
+      
+      // 천장에 닿으면 붙이기
+      if (state.currentBubble.y <= BUBBLE_RADIUS + 2) {
+        console.log(`[DEV] 🏀 천장 도달: y=${state.currentBubble.y.toFixed(1)} <= ${BUBBLE_RADIUS + 2}`)
+        attachBubbleToTop()
+        return
+      }
+      
+      // 완화된 충돌 감지 (이동 종료 트리거로만 사용)
+      const shouldStop = checkMovementTermination(prevX, prevY, state.currentBubble.x, state.currentBubble.y)
+      
+      if (shouldStop) {
+        console.log(`[DEV] 🛑 이동 종료 트리거 감지 - 빈 공간 우선 스냅 시작`)
+        
+        // 현재 위치 기준으로 최적의 빈 셀 찾기
+        snapToOptimalEmptyCell()
+        return
+      }
+    }
+  }
+
+  const checkMovementTermination = (startX: number, startY: number, endX: number, endY: number): boolean => {
+    const state = gameStateRef.current
+    
+    // 이동 벡터
+    const rayDx = endX - startX
+    const rayDy = endY - startY
+    const rayLength = Math.sqrt(rayDx * rayDx + rayDy * rayDy)
+    
+    if (rayLength < 0.001) return false
+    
+    // 정규화된 방향 벡터
+    const rayDirX = rayDx / rayLength
+    const rayDirY = rayDy / rayLength
+    
+    console.log(`[DEV] 🔍 이동 종료 체크: (${startX.toFixed(1)}, ${startY.toFixed(1)}) → (${endX.toFixed(1)}, ${endY.toFixed(1)}), 길이=${rayLength.toFixed(2)}`)
+    
+    // 완화된 충돌 검사 (더 관대한 기준)
+    for (let bubble of state.bubbles) {
+      const bubblePos = getBubbleRenderPosition(bubble)
+      
+      // 현재 위치에서 버블까지의 거리
+      const distanceToEnd = Math.sqrt(
+        Math.pow(endX - bubblePos.x, 2) + 
+        Math.pow(endY - bubblePos.y, 2)
+      )
+      
+      // 완화된 충돌 반지름 (1.8배로 줄임)
+      const collisionRadius = BUBBLE_RADIUS * 1.8
+      
+      if (distanceToEnd <= collisionRadius) {
+        // 스치기 충돌인지 확인
+        const isGlancing = checkIfGlancingCollision(endX, endY, rayDirX, rayDirY, bubblePos)
+        
+        if (!isGlancing) {
+          console.log(`[DEV] 🔍   유의미한 충돌: ID=${bubble.id}, 거리=${distanceToEnd.toFixed(1)}, 반지름=${collisionRadius.toFixed(1)}`)
+          return true
+        } else {
+          console.log(`[DEV] 🌊   스치기 충돌 무시: ID=${bubble.id}, 거리=${distanceToEnd.toFixed(1)}`)
+        }
+      }
+    }
+    
+    return false
+  }
+
+  const checkIfGlancingCollision = (
+    currentX: number, currentY: number,
+    dirX: number, dirY: number,
+    bubblePos: {x: number, y: number}
+  ): boolean => {
+    // 현재 위치에서 버블로의 벡터
+    const toBubbleX = bubblePos.x - currentX
+    const toBubbleY = bubblePos.y - currentY
+    const toBubbleLength = Math.sqrt(toBubbleX * toBubbleX + toBubbleY * toBubbleY)
+    
+    if (toBubbleLength === 0) return false
+    
+    // 정규화
+    const toBubbleDirX = toBubbleX / toBubbleLength
+    const toBubbleDirY = toBubbleY / toBubbleLength
+    
+    // 이동 방향과 버블 방향의 내적
+    const dot = dirX * toBubbleDirX + dirY * toBubbleDirY
+    
+    // 스치기 판정 (더 관대하게 - 45도 이하면 스치기로 판정)
+    const glancingThreshold = 0.7 // cos(45°) ≈ 0.707
+    
+    return dot < glancingThreshold
+  }
+
+  const snapToOptimalEmptyCell = () => {
+    const state = gameStateRef.current
+    if (!state.currentBubble) return
+    
+    console.log(`[DEV] 🎯 빈 공간 우선 스냅 시작`)
+    console.log(`[DEV] 🎯   현재 위치: (${state.currentBubble.x.toFixed(1)}, ${state.currentBubble.y.toFixed(1)})`)
+    console.log(`[DEV] 🎯   현재 색상: "${state.currentBubble.color}"`)
+    
+    // 1단계: 현재 위치 주변의 모든 빈 셀 찾기
+    const emptyCells = findAllEmptyCells(state.currentBubble.x, state.currentBubble.y)
+    
+    if (emptyCells.length === 0) {
+      console.log(`[DEV] 🎯 빈 셀 없음 - 천장에 강제 부착`)
       attachBubbleToTop()
       return
     }
     
-    // 개선된 충돌 검사
-    checkImprovedCollision()
-  }
-
-  const checkImprovedCollision = () => {
-    const state = gameStateRef.current
-    if (!state.currentBubble) return
+    // 2단계: 기존 덩어리와 인접한 빈 셀만 필터링
+    const validCells = emptyCells.filter(cell => isAdjacentToExistingBubbles(cell.gridRow, cell.gridCol))
     
-    const currentBubble = state.currentBubble
-    let closestBubble = null
+    if (validCells.length === 0) {
+      console.log(`[DEV] 🎯 인접한 빈 셀 없음 - 천장에 강제 부착`)
+      attachBubbleToTop()
+      return
+    }
+    
+    // 3단계: 현재 위치에서 가장 가까운 유효한 셀 선택
+    let bestCell = validCells[0]
     let minDistance = Infinity
     
-    // 1단계: 가장 가까운 버블 찾기
-    for (let bubble of state.bubbles) {
-      const bubblePos = getBubbleRenderPosition(bubble)
+    console.log(`[DEV] 🎯 유효한 빈 셀들:`)
+    for (let i = 0; i < validCells.length; i++) {
+      const cell = validCells[i]
       const distance = Math.sqrt(
-        Math.pow(currentBubble.x - bubblePos.x, 2) + 
-        Math.pow(currentBubble.y - bubblePos.y, 2)
+        Math.pow(state.currentBubble.x - cell.x, 2) + 
+        Math.pow(state.currentBubble.y - cell.y, 2)
       )
       
-      // 기본 충돌 거리 (2.0배로 적당히 조정)
-      if (distance <= BUBBLE_RADIUS * 2.0 && distance < minDistance) {
+      console.log(`[DEV] 🎯   ${i + 1}. 그리드=(${cell.gridRow}, ${cell.gridCol}), 픽셀=(${Math.round(cell.x)}, ${Math.round(cell.y)}), 거리=${distance.toFixed(1)}`)
+      
+      if (distance < minDistance) {
         minDistance = distance
-        closestBubble = bubble
+        bestCell = cell
       }
     }
     
-    if (!closestBubble) {
-      // 충돌 후보가 없으면 충돌 상태 초기화
-      currentBubble.collisionCandidate = null
-      currentBubble.collisionFrames = 0
-      return
-    }
+    console.log(`[DEV] ✅ 최적 빈 셀 선택: 그리드=(${bestCell.gridRow}, ${bestCell.gridCol}), 거리=${minDistance.toFixed(1)}`)
     
-    // 2단계: 충돌 유형 분석
-    const bubblePos = getBubbleRenderPosition(closestBubble)
-    const collisionAnalysis = analyzeCollision(currentBubble, bubblePos, minDistance)
+    // 4단계: 선택된 빈 셀에 버블 배치
+    const newBubble = assignBubbleId({
+      color: state.currentBubble.color,
+      gridRow: bestCell.gridRow,
+      gridCol: bestCell.gridCol,
+      isWall: false
+    })
     
-    // 3단계: 충돌 유형에 따른 처리
-    if (collisionAnalysis.shouldBlock) {
-      // 막혀있는 상황 - 즉시 붙이기
-      console.log(`[DEV] 🚫 막힌 충돌: ${collisionAnalysis.reason}`)
-      attachBubble(closestBubble)
-      return
-    }
+    console.log(`[DEV] 🎯 빈 셀 스냅 완료: ID=${newBubble.id}, 색상="${newBubble.color}", 그리드=(${newBubble.gridRow}, ${newBubble.gridCol})`)
     
-    if (collisionAnalysis.shouldPass) {
-      // 틈 통과 허용 - 충돌 무시
-      console.log(`[DEV] 🌊 틈 통과: ${collisionAnalysis.reason}`)
-      currentBubble.collisionCandidate = null
-      currentBubble.collisionFrames = 0
-      return
-    }
+    state.bubbles.push(newBubble)
     
-    // 4단계: 애매한 경우 - 유예 시간 적용
-    if (currentBubble.collisionCandidate === closestBubble) {
-      currentBubble.collisionFrames = (currentBubble.collisionFrames || 0) + 1
-      
-      // 2프레임 이상 지속되면 붙이기 (기존 3프레임에서 단축)
-      if (currentBubble.collisionFrames >= 2) {
-        console.log(`[DEV] 🎯 지연 충돌: ${currentBubble.collisionFrames}프레임`)
-        attachBubble(closestBubble)
-        return
-      }
-    } else {
-      currentBubble.collisionCandidate = closestBubble
-      currentBubble.collisionFrames = 1
-    }
+    // 매칭 검사
+    checkMatches(newBubble)
     
-    currentBubble.lastCollisionDistance = minDistance
+    createNewBubble()
+    createNextBubble()
+    checkGameOver()
   }
 
-  const analyzeCollision = (currentBubble: CurrentBubble, targetPos: {x: number, y: number}, distance: number) => {
-    // 이동 방향 벡터
-    const moveVector = { x: currentBubble.dx, y: currentBubble.dy }
-    const moveSpeed = Math.sqrt(moveVector.x * moveVector.x + moveVector.y * moveVector.y)
-    
-    if (moveSpeed === 0) {
-      return { shouldBlock: true, shouldPass: false, reason: "정지 상태" }
-    }
-    
-    // 정규화된 이동 방향
-    const moveDir = { x: moveVector.x / moveSpeed, y: moveVector.y / moveSpeed }
-    
-    // 현재 위치에서 타겟으로의 벡터
-    const toTarget = { 
-      x: targetPos.x - currentBubble.x, 
-      y: targetPos.y - currentBubble.y 
-    }
-    const toTargetDistance = Math.sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y)
-    
-    if (toTargetDistance === 0) {
-      return { shouldBlock: true, shouldPass: false, reason: "동일 위치" }
-    }
-    
-    // 정규화된 타겟 방향
-    const toTargetDir = { x: toTarget.x / toTargetDistance, y: toTarget.y / toTargetDistance }
-    
-    // 이동 방향과 타겟 방향의 내적 (코사인 값)
-    const dot = moveDir.x * toTargetDir.x + moveDir.y * toTargetDir.y
-    
-    // 1. 매우 가까운 거리 - 무조건 막기
-    if (distance < BUBBLE_RADIUS * 1.7) {
-      return { shouldBlock: true, shouldPass: false, reason: `매우 근접 (${distance.toFixed(1)})` }
-    }
-    
-    // 2. 정면 충돌 (cos > 0.7, 약 45도 이내) - 막기
-    if (dot > 0.7) {
-      return { shouldBlock: true, shouldPass: false, reason: `정면 충돌 (cos=${dot.toFixed(2)})` }
-    }
-    
-    // 3. 역방향 이동 (cos < -0.3) - 지나가는 중
-    if (dot < -0.3) {
-      return { shouldPass: true, shouldBlock: false, reason: `역방향 이동 (cos=${dot.toFixed(2)})` }
-    }
-    
-    // 4. 측면 스치기 (0.7 > cos > -0.3) - 거리와 주변 상황 고려
-    
-    // 주변에 다른 버블들이 있는지 확인 (빽빽한 상황 감지)
-    const nearbyBubbles = countNearbyBubbles(targetPos)
-    
-    // 빽빽한 상황 (주변에 3개 이상 버블) - 막기
-    if (nearbyBubbles >= 3) {
-      return { shouldBlock: true, shouldPass: false, reason: `빽빽한 지역 (주변 ${nearbyBubbles}개)` }
-    }
-    
-    // 상대적으로 여유로운 상황 - 거리에 따라 판단
-    if (distance > BUBBLE_RADIUS * 1.85) {
-      return { shouldPass: true, shouldBlock: false, reason: `여유로운 틈 (${distance.toFixed(1)})` }
-    }
-    
-    // 애매한 상황 - 유예 시간 적용
-    return { shouldBlock: false, shouldPass: false, reason: `애매한 상황 (cos=${dot.toFixed(2)}, dist=${distance.toFixed(1)})` }
-  }
-
-  const countNearbyBubbles = (centerPos: {x: number, y: number}): number => {
+  const findAllEmptyCells = (currentX: number, currentY: number) => {
     const state = gameStateRef.current
-    let count = 0
-    const checkRadius = BUBBLE_RADIUS * 3 // 3배 반경 내 버블 개수 확인
+    const emptyCells: Array<{x: number, y: number, gridRow: number, gridCol: number, distance: number}> = []
     
-    for (let bubble of state.bubbles) {
-      const bubblePos = getBubbleRenderPosition(bubble)
-      const distance = Math.sqrt(
-        Math.pow(centerPos.x - bubblePos.x, 2) + 
-        Math.pow(centerPos.y - bubblePos.y, 2)
-      )
-      
-      if (distance <= checkRadius) {
-        count++
+    // 현재 위치를 그리드 좌표로 변환
+    const currentGridCol = Math.round((currentX - BUBBLE_RADIUS) / CELL_WIDTH)
+    const currentGridRow = Math.round((currentY - BUBBLE_RADIUS) / CELL_HEIGHT) - state.boardOffsetRows
+    
+    console.log(`[DEV] 🔍 빈 셀 탐색: 현재 그리드 위치 추정 (${currentGridRow}, ${currentGridCol})`)
+    
+    // 현재 위치 주변 5x5 영역 검사
+    const searchRadius = 2
+    for (let rowOffset = -searchRadius; rowOffset <= searchRadius; rowOffset++) {
+      for (let colOffset = -searchRadius; colOffset <= searchRadius; colOffset++) {
+        const testRow = currentGridRow + rowOffset
+        const testCol = currentGridCol + colOffset
+        
+        // 경계 체크
+        if (testRow < 0 || testCol < 0 || testCol >= state.cols) continue
+        
+        // 이미 점유된 셀인지 확인
+        const isOccupied = state.bubbles.some(bubble => 
+          bubble.gridRow === testRow && bubble.gridCol === testCol
+        )
+        
+        if (isOccupied) continue
+        
+        // 그리드 셀의 실제 픽셀 위치 계산
+        const offsetX = (testRow % 2) * ROW_OFFSET_X
+        const cellX = testCol * CELL_WIDTH + BUBBLE_RADIUS + offsetX
+        const cellY = (testRow + state.boardOffsetRows) * CELL_HEIGHT + BUBBLE_RADIUS
+        
+        // 화면 경계 체크
+        if (cellX < BUBBLE_RADIUS || cellX > 500 - BUBBLE_RADIUS) continue
+        
+        // 현재 위치에서의 거리 계산
+        const distance = Math.sqrt(
+          Math.pow(currentX - cellX, 2) + 
+          Math.pow(currentY - cellY, 2)
+        )
+        
+        emptyCells.push({
+          x: cellX,
+          y: cellY,
+          gridRow: testRow,
+          gridCol: testCol,
+          distance: distance
+        })
       }
     }
     
-    return count
+    // 거리순 정렬
+    emptyCells.sort((a, b) => a.distance - b.distance)
+    
+    console.log(`[DEV] 🔍 발견된 빈 셀: ${emptyCells.length}개`)
+    return emptyCells
   }
+
+
+
+
+
+
 
 
 
@@ -723,53 +847,10 @@ export default function BubbleShooter() {
     }
   }
 
-  const attachBubble = (nearBubble: Bubble) => {
+  const isAdjacentToExistingBubbles = (testRow: number, testCol: number): boolean => {
     const state = gameStateRef.current
-    if (!state.currentBubble) return
     
-    const possiblePositions = findNearbyPositions(nearBubble)
-    
-    let bestPosition = possiblePositions[0]
-    let minDistance = Infinity
-    
-    for (let pos of possiblePositions) {
-      const distance = Math.sqrt(
-        Math.pow(state.currentBubble.x - pos.x, 2) + 
-        Math.pow(state.currentBubble.y - pos.y, 2)
-      )
-      
-      if (distance < minDistance) {
-        minDistance = distance
-        bestPosition = pos
-      }
-    }
-    
-    const newBubble = assignBubbleId({
-      color: state.currentBubble.color,
-      gridRow: bestPosition.gridRow,
-      gridCol: bestPosition.gridCol,
-      isWall: false // 쏜 버블은 항상 일반 버블
-    })
-    
-    state.bubbles.push(newBubble)
-    
-    // 벽 블록이 아닌 경우에만 매칭 검사
-    if (!nearBubble.isWall) {
-      checkMatches(newBubble)
-    }
-    
-    createNewBubble()
-    createNextBubble()
-    
-    // 버블이 격자에 고정된 직후 게임오버 체크
-    checkGameOver()
-  }
-
-  const findNearbyPositions = (nearBubble: Bubble) => {
-    const state = gameStateRef.current
-    const positions = []
-    
-    // 육각형 격자의 인접 위치 (홀수/짝수 행에 따라 다름)
+    // 육각형 격자의 인접 위치 확인
     const evenRowDirections = [
       [-1, -1], [0, -1],        // 위쪽 2개
       [-1, 0],           [1, 0], // 좌우 2개  
@@ -781,65 +862,23 @@ export default function BubbleShooter() {
       [0, 1],  [1, 1]           // 아래쪽 2개
     ]
     
-    const directions = (nearBubble.gridRow % 2 === 0) ? evenRowDirections : oddRowDirections
-    
-    console.log(`[DEV] 🎯 인접 위치 탐색: 기준 버블 (${nearBubble.gridRow}, ${nearBubble.gridCol}), 행 타입: ${nearBubble.gridRow % 2 === 0 ? '짝수' : '홀수'}`)
+    const directions = (testRow % 2 === 0) ? evenRowDirections : oddRowDirections
     
     for (let [dx, dy] of directions) {
-      const newRow = nearBubble.gridRow + dy
-      const newCol = nearBubble.gridCol + dx
+      const adjRow = testRow + dy
+      const adjCol = testCol + dx
       
-      // 경계 체크
-      if (newRow < 0 || newCol < 0 || newCol >= state.cols) {
-        continue
-      }
+      // 인접 위치에 버블이 있는지 확인
+      const hasAdjacentBubble = state.bubbles.some(bubble => 
+        bubble.gridRow === adjRow && bubble.gridCol === adjCol
+      )
       
-      const offsetX = (newRow % 2) * ROW_OFFSET_X
-      const x = newCol * CELL_WIDTH + BUBBLE_RADIUS + offsetX
-      const y = newRow * CELL_HEIGHT + BUBBLE_RADIUS
-      
-      // 화면 경계 체크
-      if (x < BUBBLE_RADIUS || x > 500 - BUBBLE_RADIUS) {
-        continue
-      }
-      
-      // 해당 위치에 이미 버블이 있는지 체크 (격자 좌표로 정확히 비교)
-      const occupied = state.bubbles.some(bubble => {
-        return bubble.gridRow === newRow && bubble.gridCol === newCol
-      })
-      
-      if (!occupied) {
-        positions.push({ x, y, gridRow: newRow, gridCol: newCol })
-        console.log(`[DEV] 🎯   가능한 위치: (${newRow}, ${newCol}) → 픽셀(${Math.round(x)}, ${Math.round(y)})`)
-      } else {
-        console.log(`[DEV] 🎯   점유된 위치: (${newRow}, ${newCol})`)
+      if (hasAdjacentBubble) {
+        return true
       }
     }
     
-    // 가능한 위치가 없으면 현재 버블 위치 기준으로 격자에 스냅
-    if (positions.length === 0) {
-      console.log(`[DEV] 🎯 인접 위치 없음 - 현재 위치 기준으로 격자 스냅`)
-      const gridX = Math.round((state.currentBubble!.x - BUBBLE_RADIUS) / CELL_WIDTH)
-      const gridY = Math.round((state.currentBubble!.y - BUBBLE_RADIUS) / CELL_HEIGHT)
-      
-      // 격자 경계 보정
-      const clampedX = Math.max(0, Math.min(gridX, state.cols - 1))
-      const clampedY = Math.max(0, gridY)
-      
-      const offsetX = (clampedY % 2) * ROW_OFFSET_X
-      
-      positions.push({
-        x: clampedX * CELL_WIDTH + BUBBLE_RADIUS + offsetX,
-        y: clampedY * CELL_HEIGHT + BUBBLE_RADIUS,
-        gridRow: clampedY,
-        gridCol: clampedX
-      })
-      
-      console.log(`[DEV] 🎯   격자 스냅 위치: (${clampedY}, ${clampedX})`)
-    }
-    
-    console.log(`[DEV] 🎯 인접 위치 탐색 완료: ${positions.length}개 위치 발견`)
-    return positions
+    return false
   }
 
   const attachBubbleToTop = () => {
@@ -849,6 +888,8 @@ export default function BubbleShooter() {
     const gridX = Math.round((state.currentBubble.x - BUBBLE_RADIUS) / CELL_WIDTH)
     const gridY = 0  // 항상 최상단(0행)에 부착
     
+    console.log(`[DEV] 🎯 천장 부착 계산: 현재위치=(${state.currentBubble.x.toFixed(1)}, ${state.currentBubble.y.toFixed(1)}) → 그리드=(${gridY}, ${gridX})`)
+    
     const newBubble = assignBubbleId({
       color: state.currentBubble.color,
       gridRow: gridY,
@@ -856,9 +897,14 @@ export default function BubbleShooter() {
       isWall: false // 쏜 버블은 항상 일반 버블
     })
     
-    console.log(`[DEV] 🎯 천장에 버블 부착: ID=${newBubble.id}, 색상=${newBubble.color}, 위치=(${newBubble.gridRow}, ${newBubble.gridCol})`)
+    // 렌더링 위치 확인
+    const renderPos = getBubbleRenderPosition(newBubble)
+    console.log(`[DEV] 🎯 천장에 버블 부착: ID=${newBubble.id}, 색상="${newBubble.color}", 그리드=(${newBubble.gridRow}, ${newBubble.gridCol}), 렌더=(${Math.round(renderPos.x)}, ${Math.round(renderPos.y)})`)
     
     state.bubbles.push(newBubble)
+    
+    // 매칭 검사 전 주변 상황 로깅
+    console.log(`[DEV] 🎯 천장 부착 후 매칭 검사 시작...`)
     checkMatches(newBubble)
     
     createNewBubble()
@@ -871,6 +917,12 @@ export default function BubbleShooter() {
   const checkMatches = (bubble: Bubble) => {
     console.log(`[DEV] 🎯 매칭 검사 시작: 버블 ID=${bubble.id}, 색상=${bubble.color}, 위치=(${bubble.gridRow}, ${bubble.gridCol})`)
     
+    // 디버깅: 붙인 직후 버블 정보 상세 출력
+    const bubblePos = getBubbleRenderPosition(bubble)
+    console.log(`[DEV] 🎯 버블 렌더 위치: (${Math.round(bubblePos.x)}, ${Math.round(bubblePos.y)})`)
+    console.log(`[DEV] 🎯 버블 색상 (문자열): "${bubble.color}"`)
+    console.log(`[DEV] 🎯 벽 블록 여부: ${bubble.isWall || false}`)
+    
     // 매칭 검사 전 버블 상태 스냅샷
     const beforeSnapshot = createBubbleSnapshot(gameStateRef.current.bubbles, '매칭 검사 전')
     
@@ -878,16 +930,25 @@ export default function BubbleShooter() {
     
     console.log(`[DEV] 🎯 매칭 결과: ${matches.length}개 버블 발견`)
     
+    // 디버깅: 찾은 매칭 버블들 상세 정보
+    if (matches.length > 0) {
+      console.log(`[DEV] 🎯 매칭된 버블들:`)
+      matches.forEach((match, index) => {
+        const matchPos = getBubbleRenderPosition(match)
+        console.log(`[DEV] 🎯   ${index + 1}. ID=${match.id}, 색상="${match.color}", 위치=(${match.gridRow}, ${match.gridCol}), 렌더=(${Math.round(matchPos.x)}, ${Math.round(matchPos.y)})`)
+      })
+    }
+    
     if (matches.length >= 3) {
       const state = gameStateRef.current
       
-      console.log(`[DEV] 🎯 매칭 성공! ${matches.length}개 버블 제거 시작`)
+      console.log(`[DEV] ✅ 매칭 성공! ${matches.length}개 버블 제거 시작`)
       
       // 터지는 효과 생성
       matches.forEach(match => {
         const pos = getBubbleRenderPosition(match)
         createPopEffect(pos.x, pos.y, match.color)
-        console.log(`[DEV] 🎯   제거 대상: ID=${match.id}, 색상=${match.color}, 위치=(${match.gridRow}, ${match.gridCol})`)
+        console.log(`[DEV] 💥   제거 대상: ID=${match.id}, 색상=${match.color}, 위치=(${match.gridRow}, ${match.gridCol})`)
       })
       
       for (let match of matches) {
@@ -909,12 +970,38 @@ export default function BubbleShooter() {
       console.log(`[DEV] 🎯 떠있는 버블 제거 시작...`)
       removeFloatingBubbles()
     } else {
-      console.log(`[DEV] 🎯 매칭 실패: ${matches.length}개 < 3개 (제거 안 함)`)
+      console.log(`[DEV] ❌ 매칭 실패: ${matches.length}개 < 3개 (제거 안 함)`)
+      
+      // 디버깅: 매칭 실패 시 주변 버블들 확인
+      console.log(`[DEV] 🔍 주변 버블 분석:`)
+      const state = gameStateRef.current
+      const bubblePos = getBubbleRenderPosition(bubble)
+      
+      for (let other of state.bubbles) {
+        if (other === bubble) continue
+        
+        const otherPos = getBubbleRenderPosition(other)
+        const distance = Math.sqrt(
+          Math.pow(bubblePos.x - otherPos.x, 2) + 
+          Math.pow(bubblePos.y - otherPos.y, 2)
+        )
+        
+        if (distance < BUBBLE_RADIUS * 2.5) {
+          const colorMatch = other.color === bubble.color
+          console.log(`[DEV] 🔍   인접 버블: ID=${other.id}, 색상="${other.color}", 거리=${distance.toFixed(1)}, 색상매칭=${colorMatch}, 벽=${other.isWall || false}`)
+        }
+      }
     }
   }
 
   const findMatches = (bubble: Bubble, color: string, visited: Bubble[]): Bubble[] => {
+    // 벽 블록이거나 이미 방문했거나 색상이 다르면 제외
     if (visited.includes(bubble) || bubble.color !== color || bubble.isWall) {
+      if (bubble.isWall) {
+        console.log(`[DEV] 🔍 벽 블록 제외: ID=${bubble.id}`)
+      } else if (bubble.color !== color) {
+        console.log(`[DEV] 🔍 색상 불일치 제외: ID=${bubble.id}, 기대="${color}", 실제="${bubble.color}"`)
+      }
       return []
     }
     
@@ -923,6 +1010,8 @@ export default function BubbleShooter() {
     
     const state = gameStateRef.current
     const bubblePos = getBubbleRenderPosition(bubble)
+    
+    console.log(`[DEV] 🔍 매칭 탐색: ID=${bubble.id}, 색상="${bubble.color}", 위치=(${bubble.gridRow}, ${bubble.gridCol})`)
     
     for (let other of state.bubbles) {
       if (other === bubble || visited.includes(other) || other.isWall) continue
@@ -933,8 +1022,12 @@ export default function BubbleShooter() {
         Math.pow(bubblePos.y - otherPos.y, 2)
       )
       
+      // 인접 거리 기준 (2.5배)
       if (distance < BUBBLE_RADIUS * 2.5 && other.color === color) {
+        console.log(`[DEV] 🔍   인접 매칭 발견: ID=${other.id}, 거리=${distance.toFixed(1)}, 색상="${other.color}"`)
         matches = matches.concat(findMatches(other, color, visited))
+      } else if (distance < BUBBLE_RADIUS * 2.5) {
+        console.log(`[DEV] 🔍   인접하지만 색상 다름: ID=${other.id}, 거리=${distance.toFixed(1)}, 색상="${other.color}" vs "${color}"`)
       }
     }
     
