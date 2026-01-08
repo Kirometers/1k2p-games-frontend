@@ -12,6 +12,8 @@ export type GameMeta = {
   mode: LocalizedString
   status: GameStatus
   description: LocalizedString
+  thumbnail?: string
+  heroImage?: string
 }
 
 type GameModule = {

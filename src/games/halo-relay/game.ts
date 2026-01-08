@@ -9,6 +9,7 @@ const game: GameMeta = {
     en: 'Pass the halo through checkpoints, one miss resets.',
     ko: '체크포인트를 헤일로로 전달하고 한 번 미스하면 리셋.',
   },
+  heroImage: '/src/games/halo-relay/assets/hero.svg',
 }
 
 export default game

@@ -149,6 +149,9 @@ const copy = {
 
 type Copy = (typeof copy)['en']
 
+const placeholderImage =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0%" stop-color="%23dbeafe"/><stop offset="100%" stop-color="%2393c5fd"/></linearGradient></defs><rect width="320" height="320" rx="28" fill="url(%23g)"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Open Sans, Arial, sans-serif" font-size="48" fill="%231e293b">1k2p</text></svg>'
+
 function App() {
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [locale, setLocale] = useState<Locale>(() => {
@@ -296,20 +299,87 @@ function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: 
             >
               <Cards
                 cardDefinition={{
-                  header: (item) => resolveLocaleString(item.title, locale),
+                  header: (item) => {
+                    const imageSrc = item.thumbnail ?? placeholderImage
+                    const title = resolveLocaleString(item.title, locale)
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: 8,
+                            overflow: 'hidden',
+                            border: '1px solid var(--awsui-color-border-divider-default)',
+                            background: 'var(--awsui-color-background-layout-main)',
+                            flex: '0 0 40px',
+                          }}
+                        >
+                          <img
+                            src={imageSrc}
+                            alt={title}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </div>
+                        <Box variant="h3">{title}</Box>
+                      </div>
+                    )
+                  },
                   sections: [
                     {
-                      id: 'mode',
-                      header: t.cardsMode,
-                      content: (item) => resolveLocaleString(item.mode, locale),
+                      id: 'hero',
+                      content: (item) => {
+                        const heroSrc = item.heroImage ?? item.thumbnail ?? placeholderImage
+                        const title = resolveLocaleString(item.title, locale)
+                        return (
+                          <div
+                            style={{
+                              width: '100%',
+                              aspectRatio: '16 / 9',
+                              borderRadius: 12,
+                              overflow: 'hidden',
+                              border: '1px solid var(--awsui-color-border-divider-default)',
+                              background: 'var(--awsui-color-background-layout-main)',
+                            }}
+                          >
+                            <img
+                              src={heroSrc}
+                              alt={title}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          </div>
+                        )
+                      },
                     },
                     {
-                      id: 'status',
-                      header: t.cardsStatus,
+                      id: 'meta',
                       content: (item) => (
-                        <StatusIndicator type={statusMap[item.status] ?? 'info'}>
-                          {statusLabels[locale][item.status]}
-                        </StatusIndicator>
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '16px',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <div style={{ width: '50%', minWidth: 0 }}>
+                            <SpaceBetween size="xs">
+                              <Box variant="small" color="text-body-secondary">
+                                {t.cardsMode}
+                              </Box>
+                              <Box>{resolveLocaleString(item.mode, locale)}</Box>
+                            </SpaceBetween>
+                          </div>
+                          <div style={{ width: '50%', minWidth: 0 }}>
+                            <SpaceBetween size="xs">
+                              <Box variant="small" color="text-body-secondary">
+                                {t.cardsStatus}
+                              </Box>
+                              <StatusIndicator type={statusMap[item.status] ?? 'info'}>
+                                {statusLabels[locale][item.status]}
+                              </StatusIndicator>
+                            </SpaceBetween>
+                          </div>
+                        </div>
                       ),
                     },
                     {
