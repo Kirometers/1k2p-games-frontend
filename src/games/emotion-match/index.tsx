@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useReducer } from 'react'
+import { useState, useEffect, useCallback, useReducer, useRef } from 'react'
 import './styles.css'
 
 // Types
@@ -10,9 +10,11 @@ type Block = {
   isMatched?: boolean
   isHinted?: boolean
   isInvalid?: boolean
+  row?: number
+  col?: number
 }
 
-type GameState = 'menu' | 'difficulty' | 'character-select' | 'playing' | 'paused' | 'game-over'
+type GameState = 'menu' | 'how-to-play' | 'difficulty' | 'character-select' | 'playing' | 'paused' | 'game-over'
 type Difficulty = 'normal' | 'hard'
 
 interface GameData {
@@ -27,6 +29,14 @@ interface GameData {
   availableCharacters: string[]
   isAnimating: boolean
   isProcessing: boolean
+  isHintActive: boolean
+  hintBlocks: Position[]
+  dragState: {
+    isDragging: boolean
+    startPos: Position | null
+    startCoords: { x: number; y: number } | null
+    currentCoords: { x: number; y: number } | null
+  }
 }
 
 // Available emotion characters
@@ -52,10 +62,16 @@ type GameAction =
   | { type: 'UPDATE_SCORE'; payload: number }
   | { type: 'UPDATE_TIME'; payload: number }
   | { type: 'USE_HINT' }
+  | { type: 'SET_HINT_BLOCKS'; payload: Position[] }
+  | { type: 'CLEAR_HINT_BLOCKS' }
+  | { type: 'SET_HINT_ACTIVE'; payload: boolean }
   | { type: 'SELECT_BLOCK'; payload: Position }
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_ANIMATING'; payload: boolean }
   | { type: 'SET_PROCESSING'; payload: boolean }
+  | { type: 'START_DRAG'; payload: { pos: Position; coords: { x: number; y: number } } }
+  | { type: 'UPDATE_DRAG'; payload: { x: number; y: number } }
+  | { type: 'END_DRAG' }
   | { type: 'FORCE_UNLOCK' }
   | { type: 'RESET_GAME' }
 
@@ -70,7 +86,15 @@ const initialState: GameData = {
   selectedCharacters: [],
   availableCharacters: ALL_CHARACTERS,
   isAnimating: false,
-  isProcessing: false
+  isProcessing: false,
+  isHintActive: false,
+  hintBlocks: [],
+  dragState: {
+    isDragging: false,
+    startPos: null,
+    startCoords: null,
+    currentCoords: null
+  }
 }
 
 function gameReducer(state: GameData, action: GameAction): GameData {
@@ -89,6 +113,12 @@ function gameReducer(state: GameData, action: GameAction): GameData {
       return { ...state, timeLeft: Math.min(60, Math.max(0, action.payload)) }
     case 'USE_HINT':
       return { ...state, hintsLeft: Math.max(0, state.hintsLeft - 1) }
+    case 'SET_HINT_BLOCKS':
+      return { ...state, hintBlocks: action.payload, isHintActive: true }
+    case 'CLEAR_HINT_BLOCKS':
+      return { ...state, hintBlocks: [], isHintActive: false }
+    case 'SET_HINT_ACTIVE':
+      return { ...state, isHintActive: action.payload }
     case 'SELECT_BLOCK':
       const newSelection = state.selectedBlocks.length === 2 
         ? [action.payload] 
@@ -100,12 +130,48 @@ function gameReducer(state: GameData, action: GameAction): GameData {
       return { ...state, isAnimating: action.payload }
     case 'SET_PROCESSING':
       return { ...state, isProcessing: action.payload }
+    case 'START_DRAG':
+      return { 
+        ...state, 
+        dragState: {
+          isDragging: true,
+          startPos: action.payload.pos,
+          startCoords: action.payload.coords,
+          currentCoords: action.payload.coords
+        }
+      }
+    case 'UPDATE_DRAG':
+      return { 
+        ...state, 
+        dragState: {
+          ...state.dragState,
+          currentCoords: action.payload
+        }
+      }
+    case 'END_DRAG':
+      return { 
+        ...state, 
+        dragState: {
+          isDragging: false,
+          startPos: null,
+          startCoords: null,
+          currentCoords: null
+        }
+      }
     case 'FORCE_UNLOCK':
       return { 
         ...state, 
         isAnimating: false, 
         isProcessing: false, 
         selectedBlocks: [],
+        isHintActive: false,
+        hintBlocks: [],
+        dragState: {
+          isDragging: false,
+          startPos: null,
+          startCoords: null,
+          currentCoords: null
+        },
         board: state.board.map((row: Block[]) => 
           row.map((block: Block) => ({ 
             ...block, 
@@ -124,6 +190,7 @@ function gameReducer(state: GameData, action: GameAction): GameData {
 export default function EmotionMatch() {
   const [gameData, dispatch] = useReducer(gameReducer, initialState)
   const [gameTimer, setGameTimer] = useState<number | null>(null)
+  const hintTimeoutRef = useRef<number | null>(null)
 
   const gridSize = gameData.difficulty === 'normal' ? 10 : 12
   const requiredCharacters = gameData.difficulty === 'normal' ? 6 : 8
@@ -145,7 +212,9 @@ export default function EmotionMatch() {
         
         board[row][col] = {
           type: blockType,
-          id: `${row}-${col}-${Date.now()}-${Math.random()}`
+          id: `${row}-${col}-${Date.now()}-${Math.random()}`,
+          row: row,
+          col: col
         }
       }
     }
@@ -242,30 +311,41 @@ export default function EmotionMatch() {
     return moves
   }, [isValidMove])
 
-  // Apply gravity and fill empty spaces
+  // Apply gravity with proper drop-down physics
   const applyGravity = useCallback((board: Block[][], characters: string[]): Block[][] => {
-    const newBoard = board.map((row: Block[]) => [...row])
-    const size = newBoard.length
+    const newBoard: Block[][] = Array(board.length).fill(null).map(() => Array(board[0].length).fill(null))
+    const size = board.length
 
+    // Process each column independently
     for (let col = 0; col < size; col++) {
-      // Move blocks down
-      let writePos = size - 1
-      for (let row = size - 1; row >= 0; row--) {
-        if (!newBoard[row][col].isMatched) {
-          if (writePos !== row) {
-            newBoard[writePos][col] = { ...newBoard[row][col] }
-            newBoard[row][col] = { type: '', id: '', isMatched: true }
-          }
-          writePos--
+      // Step 1: Extract valid (non-matched) blocks from this column
+      const validBlocks: Block[] = []
+      for (let row = 0; row < size; row++) {
+        const block = board[row][col]
+        if (block && !block.isMatched && block.type) {
+          validBlocks.push({ ...block, row, col })
         }
       }
 
-      // Fill empty spaces with new blocks
-      for (let row = 0; row <= writePos; row++) {
+      // Step 2: Place valid blocks at the bottom of the column
+      const startRow = size - validBlocks.length
+      for (let i = 0; i < validBlocks.length; i++) {
+        const targetRow = startRow + i
+        newBoard[targetRow][col] = {
+          ...validBlocks[i],
+          row: targetRow,
+          col: col
+        }
+      }
+
+      // Step 3: Fill empty spaces at the top with new random blocks
+      for (let row = 0; row < startRow; row++) {
         const blockType = characters[Math.floor(Math.random() * characters.length)]
         newBoard[row][col] = {
           type: blockType,
-          id: `${row}-${col}-${Date.now()}-${Math.random()}`
+          id: `${row}-${col}-${Date.now()}-${Math.random()}`,
+          row: row,
+          col: col
         }
       }
     }
@@ -273,7 +353,7 @@ export default function EmotionMatch() {
     return newBoard
   }, [])
 
-  // Process matches and update score
+  // Process matches and update score - IMPROVED VFX TIMING
   const processMatches = useCallback(async (board: Block[][]): Promise<Block[][]> => {
     let currentBoard = board.map((row: Block[]) => [...row])
     let totalScore = 0
@@ -291,14 +371,20 @@ export default function EmotionMatch() {
           break
         }
 
-        // Mark matched blocks
+        // STEP 1: 즉시 시각적 효과 적용 (터지는 애니메이션)
         matches.forEach((pos: Position) => {
           if (currentBoard[pos.row] && currentBoard[pos.row][pos.col]) {
             currentBoard[pos.row][pos.col].isMatched = true
           }
         })
 
-        // Calculate score
+        // 즉시 보드 업데이트하여 터지는 애니메이션 시작
+        dispatch({ type: 'SET_BOARD', payload: [...currentBoard] })
+
+        // STEP 2: 애니메이션 시간 대기 (0.4초)
+        await new Promise(resolve => setTimeout(resolve, 400))
+
+        // STEP 3: 점수 계산
         const matchGroups = new Map<string, number>()
         matches.forEach((pos: Position) => {
           if (currentBoard[pos.row] && currentBoard[pos.row][pos.col]) {
@@ -314,16 +400,16 @@ export default function EmotionMatch() {
           else if (count >= 6) totalScore += 10
         })
 
-        // Apply gravity
+        // STEP 4: 실제 데이터 삭제 및 중력 적용
         currentBoard = applyGravity(currentBoard, gameData.selectedCharacters)
         
-        // Small delay for animation
+        // 새로운 블록들이 떨어지는 애니메이션을 위한 짧은 대기
         await new Promise(resolve => setTimeout(resolve, 200))
       }
 
       if (totalScore > 0) {
         dispatch({ type: 'UPDATE_SCORE', payload: totalScore })
-        dispatch({ type: 'UPDATE_TIME', payload: gameData.timeLeft + 2 }) // Bonus time
+        // Time bonus removed - hardcore mode
       }
 
     } catch (error) {
@@ -335,98 +421,110 @@ export default function EmotionMatch() {
     }
 
     return currentBoard
-  }, [findMatches, applyGravity, gameData.selectedCharacters, gameData.timeLeft])
+  }, [findMatches, applyGravity, gameData.selectedCharacters])
 
-  // Safety timeout for selected blocks
-  useEffect(() => {
-    let timeoutId: number | null = null
-    
-    if (gameData.selectedBlocks.length > 0 && gameData.gameState === 'playing') {
-      timeoutId = setTimeout(() => {
-        console.log('Safety timeout: Force clearing selection')
-        dispatch({ type: 'FORCE_UNLOCK' })
-      }, 1000) // 1초 후 자동 해제
-    }
-    
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId)
-    }
-  }, [gameData.selectedBlocks, gameData.gameState])
-
-  // Handle block click with safety mechanisms
-  const handleBlockClick = useCallback(async (row: number, col: number) => {
-    // 기본 조건 체크
-    if (gameData.isAnimating || gameData.isProcessing || gameData.gameState !== 'playing') {
-      console.log('Click blocked: game not ready')
+  // Handle drag end with 2-block limitation (only adjacent blocks) - FIXED SWAP THEN MATCH
+  const handleDragEnd = useCallback(async (clientX: number, clientY: number) => {
+    if (!gameData.dragState.isDragging || !gameData.dragState.startPos || !gameData.dragState.startCoords) {
+      dispatch({ type: 'END_DRAG' })
       return
     }
 
-    const position = { row, col }
-    
-    try {
-      dispatch({ type: 'SET_PROCESSING', payload: true })
-      
-      if (gameData.selectedBlocks.length === 0) {
-        // 첫 번째 블록 선택
-        dispatch({ type: 'SELECT_BLOCK', payload: position })
-        
-      } else if (gameData.selectedBlocks.length === 1) {
-        const firstPos = gameData.selectedBlocks[0]
-        
-        // 같은 블록 클릭 시 선택 해제
-        if (firstPos.row === row && firstPos.col === col) {
-          dispatch({ type: 'CLEAR_SELECTION' })
-          return
-        }
-        
-        // 인접성 체크
-        const isAdjacent = Math.abs(firstPos.row - row) + Math.abs(firstPos.col - col) === 1
-        
-        if (!isAdjacent) {
-          // 인접하지 않으면 새로운 블록 선택
-          dispatch({ type: 'SELECT_BLOCK', payload: position })
-          return
-        }
+    const deltaX = clientX - gameData.dragState.startCoords.x
+    const deltaY = clientY - gameData.dragState.startCoords.y
+    const minDistance = 30 // Minimum drag distance to register as swipe
 
-        // 유효한 이동인지 체크
-        const isValid = isValidMove(gameData.board, firstPos, position)
+    // Calculate if drag distance is sufficient
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+    
+    if (distance < minDistance) {
+      // Not enough movement - just end drag
+      dispatch({ type: 'END_DRAG' })
+      return
+    }
+
+    // Determine direction (prioritize the larger movement) - LIMITED TO 1 ADJACENT BLOCK ONLY
+    let targetPos: Position | null = null
+    const startPos = gameData.dragState.startPos
+
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      // Horizontal movement - limit to 1 block only
+      if (deltaX > 0 && startPos.col < gridSize - 1) {
+        // Right - only 1 block
+        targetPos = { row: startPos.row, col: startPos.col + 1 }
+      } else if (deltaX < 0 && startPos.col > 0) {
+        // Left - only 1 block
+        targetPos = { row: startPos.row, col: startPos.col - 1 }
+      }
+    } else {
+      // Vertical movement - limit to 1 block only
+      if (deltaY > 0 && startPos.row < gridSize - 1) {
+        // Down - only 1 block
+        targetPos = { row: startPos.row + 1, col: startPos.col }
+      } else if (deltaY < 0 && startPos.row > 0) {
+        // Up - only 1 block
+        targetPos = { row: startPos.row - 1, col: startPos.col }
+      }
+    }
+
+    dispatch({ type: 'END_DRAG' })
+
+    // If we have a valid target (only adjacent block), attempt the swap
+    if (targetPos) {
+      try {
+        dispatch({ type: 'SET_PROCESSING', payload: true })
+        
+        // Check if move is valid
+        const isValid = isValidMove(gameData.board, startPos, targetPos)
         
         if (isValid) {
-          // 유효한 이동 - 스왑 및 매칭 처리
+          // Valid move - perform swap FIRST, then process matches
           dispatch({ type: 'SET_ANIMATING', payload: true })
           
-          // 블록 스왑
+          // Step 1: Swap the blocks
           const newBoard = gameData.board.map((row: Block[]) => [...row])
-          const temp = newBoard[firstPos.row][firstPos.col]
-          newBoard[firstPos.row][firstPos.col] = newBoard[row][col]
-          newBoard[row][col] = temp
+          const temp = newBoard[startPos.row][startPos.col]
+          newBoard[startPos.row][startPos.col] = newBoard[targetPos.row][targetPos.col]
+          newBoard[targetPos.row][targetPos.col] = temp
+          
+          // Update positions in the block objects
+          newBoard[startPos.row][startPos.col].row = startPos.row
+          newBoard[startPos.row][startPos.col].col = startPos.col
+          newBoard[targetPos.row][targetPos.col].row = targetPos.row
+          newBoard[targetPos.row][targetPos.col].col = targetPos.col
           
           dispatch({ type: 'SET_BOARD', payload: newBoard })
-          dispatch({ type: 'CLEAR_SELECTION' })
           
-          // 매칭 처리
-          const processedBoard = await processMatches(newBoard)
-          dispatch({ type: 'SET_BOARD', payload: processedBoard })
+          // Step 2: Wait for swap animation to complete, then process matches
+          setTimeout(async () => {
+            try {
+              const processedBoard = await processMatches(newBoard)
+              dispatch({ type: 'SET_BOARD', payload: processedBoard })
+            } catch (error) {
+              console.error('Error processing matches after swap:', error)
+            } finally {
+              dispatch({ type: 'SET_ANIMATING', payload: false })
+              dispatch({ type: 'SET_PROCESSING', payload: false })
+            }
+          }, 300) // Wait for swap animation
           
         } else {
-          // 무효한 이동 - 에러 애니메이션 표시
+          // Invalid move - show error animation
           dispatch({ type: 'SET_ANIMATING', payload: true })
           
-          // 에러 상태 표시
           const errorBoard = gameData.board.map((row: Block[]) => [...row])
-          errorBoard[firstPos.row][firstPos.col].isInvalid = true
-          errorBoard[row][col].isInvalid = true
+          errorBoard[startPos.row][startPos.col].isInvalid = true
+          errorBoard[targetPos.row][targetPos.col].isInvalid = true
           
           dispatch({ type: 'SET_BOARD', payload: errorBoard })
           
-          // 300ms 후 복구
+          // Clear error after animation
           setTimeout(() => {
             try {
               const clearedBoard = errorBoard.map((row: Block[]) => 
                 row.map((block: Block) => ({ ...block, isInvalid: false }))
               )
               dispatch({ type: 'SET_BOARD', payload: clearedBoard })
-              dispatch({ type: 'CLEAR_SELECTION' })
               dispatch({ type: 'SET_ANIMATING', payload: false })
               dispatch({ type: 'SET_PROCESSING', payload: false })
             } catch (error) {
@@ -435,64 +533,277 @@ export default function EmotionMatch() {
             }
           }, 300)
           
-          return // 여기서 함수 종료
+          return
         }
+        
+      } catch (error) {
+        console.error('Error in handleDragEnd:', error)
+        dispatch({ type: 'FORCE_UNLOCK' })
+      }
+    } else {
+      // No valid target - just unlock
+      dispatch({ type: 'SET_PROCESSING', payload: false })
+    }
+  }, [gameData.dragState, gameData.board, gridSize, isValidMove, processMatches])
+
+  // Handle drag start (mouse/touch)
+  const handleDragStart = useCallback((row: number, col: number, clientX: number, clientY: number) => {
+    if (gameData.isAnimating || gameData.isProcessing || gameData.gameState !== 'playing') {
+      return
+    }
+
+    // Clear any active hints
+    if (gameData.isHintActive) {
+      if (hintTimeoutRef.current) {
+        clearTimeout(hintTimeoutRef.current)
+        hintTimeoutRef.current = null
+      }
+      dispatch({ type: 'CLEAR_HINT_BLOCKS' })
+    }
+
+    dispatch({ 
+      type: 'START_DRAG', 
+      payload: { 
+        pos: { row, col }, 
+        coords: { x: clientX, y: clientY } 
+      } 
+    })
+  }, [gameData.isAnimating, gameData.isProcessing, gameData.gameState, gameData.isHintActive])
+
+  // Handle drag move (real-time coordinate updates)
+  const handleDragMove = useCallback((clientX: number, clientY: number) => {
+    if (gameData.dragState.isDragging) {
+      dispatch({ 
+        type: 'UPDATE_DRAG', 
+        payload: { x: clientX, y: clientY } 
+      })
+    }
+  }, [gameData.dragState.isDragging])
+
+  // Calculate drag selection box coordinates (NO FRAME DESIGN - Fixed 50px cells)
+  const calculateDragSelectionBox = useCallback(() => {
+    if (!gameData.dragState.isDragging || !gameData.dragState.startPos || !gameData.dragState.currentCoords || !gameData.dragState.startCoords) {
+      return null
+    }
+
+    // Get the game board container element to calculate relative positions
+    const boardElement = document.querySelector('.game-board-no-frame')
+    if (!boardElement) return null
+
+    const boardRect = boardElement.getBoundingClientRect()
+    const cellSize = 50 // Fixed 50px per cell
+    // No padding since we removed the frame
+
+    // Calculate which cell the current drag position is over
+    const currentX = gameData.dragState.currentCoords.x - boardRect.left
+    const currentY = gameData.dragState.currentCoords.y - boardRect.top
+    
+    const currentCol = Math.max(0, Math.min(gridSize - 1, Math.floor(currentX / cellSize)))
+    const currentRow = Math.max(0, Math.min(gridSize - 1, Math.floor(currentY / cellSize)))
+
+    const startPos = gameData.dragState.startPos
+    
+    // LIMIT DRAG TO MAXIMUM 2 BLOCKS (adjacent only)
+    let limitedRow = currentRow
+    let limitedCol = currentCol
+    
+    // Calculate distance from start position
+    const deltaRow = Math.abs(currentRow - startPos.row)
+    const deltaCol = Math.abs(currentCol - startPos.col)
+    
+    // If dragging more than 1 block away, limit to adjacent block only
+    if (deltaRow > 1 || deltaCol > 1) {
+      // Determine primary direction and limit to 1 block distance
+      if (deltaRow > deltaCol) {
+        // Vertical movement is primary
+        limitedRow = startPos.row + (currentRow > startPos.row ? 1 : -1)
+        limitedCol = startPos.col
+      } else {
+        // Horizontal movement is primary
+        limitedCol = startPos.col + (currentCol > startPos.col ? 1 : -1)
+        limitedRow = startPos.row
       }
       
-    } catch (error) {
-      console.error('Error in handleBlockClick:', error)
-      // 에러 발생 시 강제 초기화
-      dispatch({ type: 'FORCE_UNLOCK' })
-      
-    } finally {
-      // 유효한 이동이 아닌 경우가 아니라면 처리 상태 해제
-      if (gameData.selectedBlocks.length === 0 || 
-          (gameData.selectedBlocks.length === 1 && 
-           !isValidMove(gameData.board, gameData.selectedBlocks[0], position))) {
-        setTimeout(() => {
-          dispatch({ type: 'SET_PROCESSING', payload: false })
-          dispatch({ type: 'SET_ANIMATING', payload: false })
-        }, 50)
+      // Ensure we don't go out of bounds
+      limitedRow = Math.max(0, Math.min(gridSize - 1, limitedRow))
+      limitedCol = Math.max(0, Math.min(gridSize - 1, limitedCol))
+    }
+    
+    // Calculate bounding box (always max 2 blocks)
+    const minRow = Math.min(startPos.row, limitedRow)
+    const minCol = Math.min(startPos.col, limitedCol)
+    const maxRow = Math.max(startPos.row, limitedRow)
+    const maxCol = Math.max(startPos.col, limitedCol)
+
+    return {
+      top: minRow * cellSize,
+      left: minCol * cellSize,
+      width: (maxCol - minCol + 1) * cellSize,
+      height: (maxRow - minRow + 1) * cellSize
+    }
+  }, [gameData.dragState, gridSize])
+
+  // Mouse event handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent, row: number, col: number) => {
+    e.preventDefault()
+    handleDragStart(row, col, e.clientX, e.clientY)
+  }, [handleDragStart])
+
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    handleDragEnd(e.clientX, e.clientY)
+  }, [handleDragEnd])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    handleDragMove(e.clientX, e.clientY)
+  }, [handleDragMove])
+
+  // Touch event handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent, row: number, col: number) => {
+    e.preventDefault()
+    const touch = e.touches[0]
+    handleDragStart(row, col, touch.clientX, touch.clientY)
+  }, [handleDragStart])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault()
+    const touch = e.changedTouches[0]
+    handleDragEnd(touch.clientX, touch.clientY)
+  }, [handleDragEnd])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length > 0) {
+      const touch = e.touches[0]
+      handleDragMove(touch.clientX, touch.clientY)
+    }
+  }, [handleDragMove])
+
+  // Global drag event listeners for outside-area detection
+  useEffect(() => {
+    const handleGlobalMouseUp = (e: MouseEvent) => {
+      if (gameData.dragState.isDragging) {
+        handleDragEnd(e.clientX, e.clientY)
       }
     }
-  }, [gameData, isValidMove, processMatches])
 
-  // Use hint
-  const useHint = useCallback(() => {
-    if (gameData.hintsLeft <= 0 || gameData.isProcessing || gameData.isAnimating) return
-    
-    try {
-      const availableMoves = findAvailableMoves(gameData.board)
-      if (availableMoves.length > 0) {
-        const randomMove = availableMoves[Math.floor(Math.random() * availableMoves.length)]
-        
-        // Highlight the blocks
-        const newBoard = gameData.board.map((row: Block[]) => [...row])
-        randomMove.forEach((pos: Position) => {
-          if (newBoard[pos.row] && newBoard[pos.row][pos.col]) {
-            newBoard[pos.row][pos.col].isHinted = true
-          }
-        })
-        
-        dispatch({ type: 'SET_BOARD', payload: newBoard })
-        dispatch({ type: 'USE_HINT' })
-        
-        // Remove hint after 3 seconds
-        setTimeout(() => {
-          try {
-            const clearedBoard = newBoard.map((row: Block[]) => 
-              row.map((block: Block) => ({ ...block, isHinted: false }))
-            )
-            dispatch({ type: 'SET_BOARD', payload: clearedBoard })
-          } catch (error) {
-            console.error('Error clearing hint:', error)
-          }
-        }, 3000)
+    const handleGlobalTouchEnd = (e: TouchEvent) => {
+      if (gameData.dragState.isDragging && e.changedTouches.length > 0) {
+        const touch = e.changedTouches[0]
+        handleDragEnd(touch.clientX, touch.clientY)
       }
+    }
+
+    if (gameData.dragState.isDragging) {
+      document.addEventListener('mouseup', handleGlobalMouseUp)
+      document.addEventListener('touchend', handleGlobalTouchEnd)
+    }
+
+    return () => {
+      document.removeEventListener('mouseup', handleGlobalMouseUp)
+      document.removeEventListener('touchend', handleGlobalTouchEnd)
+    }
+  }, [gameData.dragState.isDragging, handleDragEnd])
+
+  // Hint timeout cleanup effect
+  useEffect(() => {
+    return () => {
+      if (hintTimeoutRef.current) {
+        clearTimeout(hintTimeoutRef.current)
+        hintTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  // Clear hint when game state changes
+  useEffect(() => {
+    if (gameData.gameState !== 'playing' && gameData.isHintActive) {
+      if (hintTimeoutRef.current) {
+        clearTimeout(hintTimeoutRef.current)
+        hintTimeoutRef.current = null
+      }
+      dispatch({ type: 'CLEAR_HINT_BLOCKS' })
+    }
+  }, [gameData.gameState, gameData.isHintActive])
+
+  // Use hint with complete safety mechanisms
+  const useHint = useCallback(() => {
+    console.log('Hint button clicked')
+    
+    // Guard clauses - 실행 전 검사
+    if (gameData.hintsLeft <= 0) {
+      console.log('No hints left')
+      return
+    }
+    
+    if (gameData.isHintActive) {
+      console.log('Hint already active, ignoring click')
+      return
+    }
+    
+    if (gameData.gameState !== 'playing') {
+      console.log('Game not in playing state')
+      return
+    }
+    
+    if (gameData.isProcessing || gameData.isAnimating) {
+      console.log('Game is processing or animating')
+      return
+    }
+
+    try {
+      console.log('Executing hint logic')
+      
+      // Clear any existing hint timeout
+      if (hintTimeoutRef.current) {
+        clearTimeout(hintTimeoutRef.current)
+        hintTimeoutRef.current = null
+      }
+
+      // Find available moves
+      const availableMoves = findAvailableMoves(gameData.board)
+      
+      if (availableMoves.length === 0) {
+        console.log('No available moves found, not consuming hint')
+        return
+      }
+
+      // Select random move
+      const randomMove = availableMoves[Math.floor(Math.random() * availableMoves.length)]
+      console.log('Selected hint move:', randomMove)
+      
+      // Update state - hint blocks and consume hint
+      dispatch({ type: 'SET_HINT_BLOCKS', payload: randomMove })
+      dispatch({ type: 'USE_HINT' })
+      
+      // Set auto cleanup timer
+      hintTimeoutRef.current = setTimeout(() => {
+        console.log('Auto clearing hint blocks')
+        try {
+          dispatch({ type: 'CLEAR_HINT_BLOCKS' })
+          hintTimeoutRef.current = null
+        } catch (error) {
+          console.error('Error in hint cleanup:', error)
+        }
+      }, 2000) // 2초 후 자동 초기화
+      
     } catch (error) {
       console.error('Error in useHint:', error)
+      // 에러 발생 시 힌트 상태 강제 초기화
+      dispatch({ type: 'CLEAR_HINT_BLOCKS' })
+      if (hintTimeoutRef.current) {
+        clearTimeout(hintTimeoutRef.current)
+        hintTimeoutRef.current = null
+      }
     }
-  }, [gameData.board, gameData.hintsLeft, gameData.isProcessing, gameData.isAnimating, findAvailableMoves])
+  }, [
+    gameData.hintsLeft, 
+    gameData.isHintActive, 
+    gameData.gameState, 
+    gameData.isProcessing, 
+    gameData.isAnimating,
+    gameData.board,
+    findAvailableMoves
+  ])
 
   // Start game
   const startGame = useCallback(() => {
@@ -561,96 +872,245 @@ export default function EmotionMatch() {
     dispatch({ type: 'SET_CHARACTERS', payload: newSelection })
   }, [gameData.selectedCharacters, requiredCharacters])
 
+  // Random character selection (without auto-start)
+  const selectRandomCharacters = useCallback(() => {
+    const shuffled = [...ALL_CHARACTERS].sort(() => Math.random() - 0.5)
+    const randomSelection = shuffled.slice(0, requiredCharacters)
+    dispatch({ type: 'SET_CHARACTERS', payload: randomSelection })
+    // Removed auto-start - user must click "게임 시작!" manually
+  }, [requiredCharacters])
+
   // Render functions
   const renderMainMenu = () => (
-    <div className="emotion-match-menu">
-      <div className="menu-content">
-        <h1 className="game-title">Emotion Match</h1>
-        <p className="game-description">
-          Match emotion blocks to reach high altitudes within the time limit!
-        </p>
-        <button 
-          className="menu-button"
-          onClick={() => dispatch({ type: 'SET_STATE', payload: 'difficulty' })}
-        >
-          Start Game
-        </button>
+    <div className="emotion-match-wrapper">
+      <div className="game-container main-menu">
+        <div className="main-menu-buttons-container">
+          <button 
+            className="main-menu-button play-button"
+            onClick={() => dispatch({ type: 'SET_STATE', payload: 'difficulty' })}
+          >
+            PLAY
+          </button>
+          <button 
+            className="main-menu-button how-to-play-button"
+            onClick={() => dispatch({ type: 'SET_STATE', payload: 'how-to-play' })}
+          >
+            HOW TO PLAY
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderHowToPlay = () => (
+    <div className="emotion-match-wrapper">
+      <div className="game-container main-menu">
+        <div className="main-menu-buttons-container">
+          <button 
+            className="main-menu-button play-button"
+            onClick={() => dispatch({ type: 'SET_STATE', payload: 'difficulty' })}
+          >
+            PLAY
+          </button>
+          <button 
+            className="main-menu-button how-to-play-button"
+            onClick={() => dispatch({ type: 'SET_STATE', payload: 'how-to-play' })}
+          >
+            HOW TO PLAY
+          </button>
+        </div>
+        
+        {/* Modal within the 16:9 container */}
+        <div className="how-to-play-modal-container">
+          <div className="how-to-play-modal">
+            <div className="modal-header">
+              <h2 className="modal-title">👻 How to Play 👻</h2>
+              <button 
+                className="close-button"
+                onClick={() => dispatch({ type: 'SET_STATE', payload: 'menu' })}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="modal-content">
+              <div className="rule-item">
+                <div className="rule-icon">🎯</div>
+                <div className="rule-text">
+                  <h3>3개 이상의 같은 유령 매칭!</h3>
+                  <p>인접한 블록을 교환하여 3개 이상 연결하세요</p>
+                </div>
+              </div>
+              
+              <div className="rule-item">
+                <div className="rule-icon">⏰</div>
+                <div className="rule-text">
+                  <h3>제한 시간 60초!</h3>
+                  <p>시간이 다 되면 게임이 끝납니다 (하드코어 모드)</p>
+                </div>
+              </div>
+              
+              <div className="rule-item">
+                <div className="rule-icon">🏔️</div>
+                <div className="rule-text">
+                  <h3>많이 터뜨리면 고도 UP!</h3>
+                  <p>3개=3km, 4개=5km, 5개=7km, 6개+=10km</p>
+                </div>
+              </div>
+              
+              <div className="rule-item">
+                <div className="rule-icon">💡</div>
+                <div className="rule-text">
+                  <h3>힌트는 2번!</h3>
+                  <p>막힐 때 힌트 버튼으로 가능한 매칭을 확인하세요</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                className="cute-button primary"
+                onClick={() => dispatch({ type: 'SET_STATE', payload: 'difficulty' })}
+              >
+                🎮 게임 시작하기
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
 
   const renderDifficultySelect = () => (
-    <div className="emotion-match-menu">
-      <div className="menu-content">
-        <h2>Select Difficulty</h2>
-        <div className="difficulty-buttons">
-          <button 
-            className="difficulty-button"
-            onClick={() => {
-              dispatch({ type: 'SET_DIFFICULTY', payload: 'normal' })
-              dispatch({ type: 'SET_STATE', payload: 'character-select' })
-            }}
-          >
-            <div className="difficulty-title">Normal</div>
-            <div className="difficulty-desc">10x10 Grid • 6 Characters</div>
-          </button>
-          <button 
-            className="difficulty-button"
-            onClick={() => {
-              dispatch({ type: 'SET_DIFFICULTY', payload: 'hard' })
-              dispatch({ type: 'SET_STATE', payload: 'character-select' })
-            }}
-          >
-            <div className="difficulty-title">Hard</div>
-            <div className="difficulty-desc">12x12 Grid • 8 Characters</div>
-          </button>
+    <div className="emotion-match-wrapper">
+      <div className="game-container difficulty-select">
+        <div className="themed-screen-content">
+          <div className="themed-container">
+            <div className="container-header">
+              <h2 className="themed-title">🎮 게임 모드 선택</h2>
+            </div>
+            
+            <div className="difficulty-options">
+              <div 
+                className="difficulty-card normal"
+                onClick={() => {
+                  dispatch({ type: 'SET_DIFFICULTY', payload: 'normal' })
+                  dispatch({ type: 'SET_STATE', payload: 'character-select' })
+                }}
+              >
+                <div className="card-icon">👻</div>
+                <div className="card-content">
+                  <h3>Normal Mode</h3>
+                  <div className="card-details">
+                    <p>10×10 그리드</p>
+                    <p>6개 캐릭터 선택</p>
+                    <p>초보자 추천!</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div 
+                className="difficulty-card hard"
+                onClick={() => {
+                  dispatch({ type: 'SET_DIFFICULTY', payload: 'hard' })
+                  dispatch({ type: 'SET_STATE', payload: 'character-select' })
+                }}
+              >
+                <div className="card-icon">💀</div>
+                <div className="card-content">
+                  <h3>Hard Mode</h3>
+                  <div className="card-details">
+                    <p>12×12 그리드</p>
+                    <p>8개 캐릭터 선택</p>
+                    <p>도전자 전용!</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="container-footer">
+              <button 
+                className="cute-button secondary"
+                onClick={() => dispatch({ type: 'SET_STATE', payload: 'menu' })}
+              >
+                🔙 메인으로
+              </button>
+            </div>
+          </div>
         </div>
-        <button 
-          className="back-button"
-          onClick={() => dispatch({ type: 'SET_STATE', payload: 'menu' })}
-        >
-          Back
-        </button>
       </div>
     </div>
   )
 
   const renderCharacterSelect = () => (
-    <div className="emotion-match-menu">
-      <div className="menu-content">
-        <h2>Select Characters</h2>
-        <p>Choose {requiredCharacters} emotion characters for your game</p>
-        <div className="character-grid">
-          {ALL_CHARACTERS.map((character: string) => (
-            <div
-              key={character}
-              className={`character-option ${gameData.selectedCharacters.includes(character) ? 'selected' : ''}`}
-              onClick={() => toggleCharacter(character)}
-            >
-              <img 
-                src={`/src/games/emotion-match/re_${character}.png`}
-                alt={character}
-                className="character-image"
-              />
+    <div className="emotion-match-wrapper">
+      <div className="game-container character-select">
+        <div className="themed-screen-content">
+          <div className="themed-container character-select">
+            <div className="container-header">
+              <h2 className="themed-title">👻 캐릭터 선택</h2>
+              <p className="subtitle">
+                {gameData.difficulty === 'normal' ? '6개' : '8개'}의 유령 친구들을 선택하세요!
+              </p>
             </div>
-          ))}
-        </div>
-        <div className="character-select-footer">
-          <span>Selected: {gameData.selectedCharacters.length}/{requiredCharacters}</span>
-          <div className="character-select-buttons">
-            <button 
-              className="back-button"
-              onClick={() => dispatch({ type: 'SET_STATE', payload: 'difficulty' })}
-            >
-              Back
-            </button>
-            <button 
-              className="start-button"
-              disabled={gameData.selectedCharacters.length !== requiredCharacters}
-              onClick={startGame}
-            >
-              Start Game
-            </button>
+            
+            <div className="character-selection-area">
+              <div className="character-grid">
+                {ALL_CHARACTERS.map((character: string) => (
+                  <div
+                    key={character}
+                    className={`character-card ${gameData.selectedCharacters.includes(character) ? 'selected' : ''}`}
+                    onClick={() => toggleCharacter(character)}
+                  >
+                    <div className="character-glow"></div>
+                    <img 
+                      src={`/src/games/emotion-match/re_${character}.png`}
+                      alt={character}
+                      className="character-image"
+                    />
+                    <div className="selection-indicator">✨</div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="selection-status">
+                <div className="status-text">
+                  선택됨: {gameData.selectedCharacters.length}/{requiredCharacters}
+                </div>
+                <div className="selection-progress">
+                  <div 
+                    className="progress-fill"
+                    style={{ width: `${(gameData.selectedCharacters.length / requiredCharacters) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="container-footer">
+              <div className="button-group">
+                <button 
+                  className="cute-button secondary"
+                  onClick={() => dispatch({ type: 'SET_STATE', payload: 'difficulty' })}
+                >
+                  🔙 뒤로가기
+                </button>
+                
+                <button 
+                  className="cute-button magic"
+                  onClick={selectRandomCharacters}
+                >
+                  🎲 랜덤 선택
+                </button>
+                
+                <button 
+                  className="cute-button primary"
+                  disabled={gameData.selectedCharacters.length !== requiredCharacters}
+                  onClick={startGame}
+                >
+                  🚀 게임 시작!
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -658,74 +1118,142 @@ export default function EmotionMatch() {
   )
 
   const renderGameBoard = () => (
-    <div className="emotion-match-game">
-      <div className="game-main">
-        <div className="left-dashboard">
-          <div className="score-display">
-            <div className="score-label">Current Altitude</div>
-            <div className="score-value">{gameData.score}km</div>
-          </div>
-          
-          <div className="timer-hint-container">
-            <div className="vertical-timer">
-              <div className="timer-container">
-                <div 
-                  className="timer-fill"
-                  style={{ height: `${(gameData.timeLeft / 60) * 100}%` }}
-                />
-              </div>
-              <div className="timer-text">{gameData.timeLeft}s</div>
-            </div>
-            
-            <button 
-              className="hint-button"
-              disabled={gameData.hintsLeft <= 0 || gameData.isProcessing}
-              onClick={useHint}
-            >
-              💡<br/>Hint<br/>({gameData.hintsLeft})
-            </button>
-          </div>
-        </div>
-        
-        <div className="game-board-container">
-          <div 
-            className="game-board"
-            style={{ 
-              gridTemplateColumns: `repeat(${gridSize}, 1fr)`,
-              gridTemplateRows: `repeat(${gridSize}, 1fr)`
-            }}
-          >
-            {gameData.board.map((row: Block[], rowIndex: number) =>
-              row.map((block: Block, colIndex: number) => (
-                <div
-                  key={block.id}
-                  className={`game-block ${
-                    gameData.selectedBlocks.some((pos: Position) => pos.row === rowIndex && pos.col === colIndex) 
-                      ? 'selected' : ''
-                  } ${block.isMatched ? 'matched' : ''} ${block.isHinted ? 'hinted' : ''} ${block.isInvalid ? 'invalid' : ''} ${
-                    gameData.isProcessing ? 'processing' : ''
-                  }`}
-                  onClick={() => handleBlockClick(rowIndex, colIndex)}
-                >
-                  <img 
-                    src={`/src/games/emotion-match/re_${block.type}.png`}
-                    alt={block.type}
-                    className="block-image"
+    <div className="emotion-match-wrapper">
+      <div className="game-container game-play">
+        <div className="game-play-content">
+          <div className="game-main-split">
+            {/* Left Panel - Control & Time */}
+            <div className="left-panel-split">
+              {/* Pause Button - Top Left */}
+              <button 
+                className="pause-button-split"
+                disabled={gameData.isProcessing}
+                onClick={() => dispatch({ type: 'SET_STATE', payload: 'paused' })}
+              >
+                ⏸️
+              </button>
+              
+              {/* Time Group - Right of pause button */}
+              <div className="time-group-split">
+                {/* Timer Bar - Match game board height */}
+                <div className={`timer-bar-split grid-${gridSize}`}>
+                  <div 
+                    className="timer-fill"
+                    style={{ height: `${(gameData.timeLeft / 60) * 100}%` }}
                   />
                 </div>
-              ))
-            )}
+                
+                {/* Timer Text - Below bar */}
+                <div className="timer-text-split">{gameData.timeLeft}s</div>
+              </div>
+            </div>
+            
+            {/* Center - Game Board (No Frame) */}
+            <div className="game-board-container-split">
+              <div 
+                className="game-board-no-frame"
+                style={{
+                  width: `${gridSize * 50}px`,
+                  height: `${gridSize * 50}px`
+                }}
+              >
+                {gameData.board.map((row: Block[], rowIndex: number) =>
+                  row.map((block: Block, colIndex: number) => {
+                    if (!block || !block.type) return null
+                    
+                    const isSelected = gameData.selectedBlocks.some((pos: Position) => pos.row === rowIndex && pos.col === colIndex)
+                    const isHinted = gameData.hintBlocks.some((pos: Position) => pos.row === rowIndex && pos.col === colIndex)
+                    
+                    const cellSize = 50
+                    
+                    return (
+                      <div
+                        key={block.id}
+                        className={`game-block-absolute ${
+                          isSelected ? 'selected' : ''
+                        } ${block.isMatched ? 'matched' : ''} ${isHinted ? 'hinted' : ''} ${block.isInvalid ? 'invalid' : ''} ${
+                          gameData.isProcessing ? 'processing' : ''
+                        }`}
+                        onMouseDown={(e) => handleMouseDown(e, rowIndex, colIndex)}
+                        onMouseUp={handleMouseUp}
+                        onMouseMove={handleMouseMove}
+                        onTouchStart={(e) => handleTouchStart(e, rowIndex, colIndex)}
+                        onTouchEnd={handleTouchEnd}
+                        onTouchMove={handleTouchMove}
+                        style={{ 
+                          position: 'absolute',
+                          width: `${cellSize}px`,
+                          height: `${cellSize}px`,
+                          left: `${colIndex * cellSize}px`,
+                          top: `${rowIndex * cellSize}px`,
+                          cursor: gameData.isProcessing ? 'not-allowed' : 'pointer',
+                          userSelect: 'none',
+                          transition: 'top 0.5s ease-out',
+                          zIndex: isSelected ? 10 : 1
+                        }}
+                      >
+                        <img 
+                          src={`/src/games/emotion-match/re_${block.type}.png`}
+                          alt={block.type}
+                          className="block-image"
+                          draggable={false}
+                        />
+                      </div>
+                    )
+                  })
+                )}
+                
+                {/* Drag Selection Overlay */}
+                {gameData.dragState.isDragging && (() => {
+                  const selectionBox = calculateDragSelectionBox()
+                  if (!selectionBox) return null
+                  
+                  return (
+                    <div
+                      className="drag-selection-overlay"
+                      style={{
+                        position: 'absolute',
+                        top: selectionBox.top,
+                        left: selectionBox.left,
+                        width: selectionBox.width,
+                        height: selectionBox.height,
+                        border: '3px solid #FFD700',
+                        backgroundColor: 'rgba(255, 215, 0, 0.3)',
+                        borderRadius: '8px',
+                        zIndex: 100,
+                        pointerEvents: 'none',
+                        transition: 'all 0.1s ease-out'
+                      }}
+                    />
+                  )
+                })()}
+              </div>
+            </div>
+            
+            {/* Right Panel - Info & Action */}
+            <div className="right-panel-split">
+              {/* Score - Top aligned with game board */}
+              <div className="score-display-split">
+                <div className="score-label-split">Altitude</div>
+                <div className="score-value-split">{gameData.score}km</div>
+              </div>
+              
+              {/* Hint Button - Below score */}
+              <button 
+                className="hint-button-split"
+                disabled={
+                  gameData.hintsLeft <= 0 || 
+                  gameData.isProcessing || 
+                  gameData.isAnimating || 
+                  gameData.isHintActive ||
+                  gameData.gameState !== 'playing'
+                }
+                onClick={useHint}
+              >
+                💡 Hint ({gameData.hintsLeft})
+              </button>
+            </div>
           </div>
-        </div>
-        
-        <div className="right-panel">
-          <button 
-            className="pause-button"
-            disabled={gameData.isProcessing}
-            onClick={() => dispatch({ type: 'SET_STATE', payload: 'paused' })}
-          >
-            ⏸️
-          </button>
         </div>
       </div>
     </div>
@@ -754,19 +1282,31 @@ export default function EmotionMatch() {
   )
 
   const renderGameOver = () => (
-    <div className="emotion-match-menu">
-      <div className="menu-content">
-        <h2>Game Over!</h2>
-        <div className="final-score">
-          <div className="score-label">Final Altitude</div>
-          <div className="score-value">{gameData.score}km</div>
+    <div className="game-over-overlay">
+      <div className="game-over-popup">
+        <div className="game-over-header">
+          <h1 className="game-over-title">GAME OVER</h1>
         </div>
-        <button 
-          className="menu-button"
-          onClick={() => dispatch({ type: 'RESET_GAME' })}
-        >
-          Main Menu
-        </button>
+        
+        <div className="game-over-content">
+          <div className="final-score-display">
+            <div className="score-label">Final Altitude</div>
+            <div className="score-value">{gameData.score}km</div>
+          </div>
+          
+          <div className="game-over-message">
+            <p>🎮 Great job flying high! 🎮</p>
+          </div>
+        </div>
+        
+        <div className="game-over-footer">
+          <button 
+            className="game-over-button main-menu-btn"
+            onClick={() => dispatch({ type: 'RESET_GAME' })}
+          >
+            🏠 메인 메뉴로
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -777,6 +1317,9 @@ export default function EmotionMatch() {
       if (gameTimer) {
         clearInterval(gameTimer)
       }
+      if (hintTimeoutRef.current) {
+        clearTimeout(hintTimeoutRef.current)
+      }
     }
   }, [gameTimer])
 
@@ -784,6 +1327,8 @@ export default function EmotionMatch() {
   switch (gameData.gameState) {
     case 'menu':
       return renderMainMenu()
+    case 'how-to-play':
+      return renderHowToPlay()
     case 'difficulty':
       return renderDifficultySelect()
     case 'character-select':
@@ -798,7 +1343,12 @@ export default function EmotionMatch() {
         </>
       )
     case 'game-over':
-      return renderGameOver()
+      return (
+        <>
+          {renderGameBoard()}
+          {renderGameOver()}
+        </>
+      )
     default:
       return renderMainMenu()
   }
