@@ -30,8 +30,10 @@ These rules keep the Cloudscape look intact and prevent cross-team conflicts.
    - Export a default object that matches `GameMeta`.
    - Keep `id` stable and URL-safe (kebab-case).
    - Keep `status` to one of: `open`, `prototype`, `planned`.
-   - Add `thumbnail` to show a square image on the hub cards (optional).
-   - Add `heroImage` to show a wide image under the card header (optional).
+   - Add `thumbnail` to show a square image on the hub cards (optional, 1:1).
+     - Recommended size: 256x256 or larger (min 128x128).
+   - Add `heroImage` to show a wide image under the card header (optional, 16:9).
+     - Recommended size: 1280x720 or larger (min 960x540).
    - Export a default React component from `index.tsx` for the game route.
    - For hub text, prefer localized strings (`{ en, ko }`).
 
