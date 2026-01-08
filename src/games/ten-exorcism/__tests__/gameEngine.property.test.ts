@@ -11,7 +11,7 @@ import {
   countNonNullCells,
   hasValidMoves,
 } from '../gameEngine'
-import type { Board, Selection } from '../types'
+import type { Board } from '../types'
 import { BOARD_COLS, BOARD_ROWS } from '../types'
 
 /**
