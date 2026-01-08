@@ -38,6 +38,29 @@ interface Trajectory {
   dy: number
 }
 
+// 터지는 효과를 위한 파티클
+interface PopParticle {
+  x: number
+  y: number
+  dx: number
+  dy: number
+  color: string
+  life: number
+  maxLife: number
+  size: number
+}
+
+// 떨어지는 버블 애니메이션
+interface FallingBubble {
+  bubble: Bubble
+  x: number
+  y: number
+  dx: number
+  dy: number
+  rotation: number
+  rotationSpeed: number
+}
+
 export default function BubbleShooter() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [score, setScore] = useState(0)
@@ -61,7 +84,10 @@ export default function BubbleShooter() {
     countdownTimer: null as number | null,
     bubbleIdCounter: 0,  // 개발 모드용 ID 생성 카운터
     kiroImage: null as HTMLImageElement | null,
-    imageLoaded: false
+    imageLoaded: false,
+    // 애니메이션 상태
+    popParticles: [] as PopParticle[],
+    fallingBubbles: [] as FallingBubble[]
   })
 
   // 버블 배열 불변성 검증 헬퍼 함수들 (강화된 버전)
@@ -206,6 +232,10 @@ export default function BubbleShooter() {
     state.nextBubble = null
     state.trajectory = null
     state.bubbleIdCounter = 0
+    
+    // 애니메이션 상태 초기화
+    state.popParticles = []
+    state.fallingBubbles = []
     
     // React 상태 초기화
     setScore(0)
@@ -441,6 +471,10 @@ export default function BubbleShooter() {
 
   const updateBubble = () => {
     const state = gameStateRef.current
+    
+    // 애니메이션 업데이트
+    updateAnimations()
+    
     if (!state.currentBubble?.moving) return
     
     // 버블 이동
@@ -479,6 +513,71 @@ export default function BubbleShooter() {
     if (closestBubble && minDistance <= BUBBLE_RADIUS * 2.1) {
       attachBubble(closestBubble)
       return
+    }
+  }
+
+  const updateAnimations = () => {
+    const state = gameStateRef.current
+    
+    // 터지는 파티클 업데이트
+    state.popParticles = state.popParticles.filter(particle => {
+      particle.x += particle.dx
+      particle.y += particle.dy
+      particle.dy += 0.3 // 중력
+      particle.life--
+      
+      return particle.life > 0
+    })
+    
+    // 떨어지는 버블 업데이트
+    state.fallingBubbles = state.fallingBubbles.filter(falling => {
+      falling.x += falling.dx
+      falling.y += falling.dy
+      falling.dy += 0.4 // 중력
+      falling.rotation += falling.rotationSpeed
+      
+      // 화면 밖으로 나가면 제거
+      return falling.y < 700
+    })
+  }
+
+  const createPopEffect = (x: number, y: number, color: string) => {
+    const state = gameStateRef.current
+    
+    // 터지는 파티클 생성
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2
+      const speed = 3 + Math.random() * 4
+      
+      state.popParticles.push({
+        x: x,
+        y: y,
+        dx: Math.cos(angle) * speed,
+        dy: Math.sin(angle) * speed,
+        color: color,
+        life: 30 + Math.random() * 20,
+        maxLife: 50,
+        size: 3 + Math.random() * 4
+      })
+    }
+  }
+
+  const createFallingEffect = (bubbles: Bubble[]) => {
+    const state = gameStateRef.current
+    
+    // 떨어지는 버블 애니메이션 생성
+    for (let bubble of bubbles) {
+      const pos = getBubbleRenderPosition(bubble)
+      
+      state.fallingBubbles.push({
+        bubble: bubble,
+        x: pos.x,
+        y: pos.y,
+        dx: (Math.random() - 0.5) * 4, // 좌우 랜덤 속도
+        dy: Math.random() * 2, // 초기 하향 속도
+        rotation: 0,
+        rotationSpeed: (Math.random() - 0.5) * 0.3 // 회전 속도
+      })
     }
   }
 
@@ -641,7 +740,11 @@ export default function BubbleShooter() {
       const state = gameStateRef.current
       
       console.log(`[DEV] 🎯 매칭 성공! ${matches.length}개 버블 제거 시작`)
+      
+      // 터지는 효과 생성
       matches.forEach(match => {
+        const pos = getBubbleRenderPosition(match)
+        createPopEffect(pos.x, pos.y, match.color)
         console.log(`[DEV] 🎯   제거 대상: ID=${match.id}, 색상=${match.color}, 위치=(${match.gridRow}, ${match.gridCol})`)
       })
       
@@ -725,6 +828,11 @@ export default function BubbleShooter() {
     toRemove.forEach(floating => {
       console.log(`[DEV] 🌊   떠있음: ID=${floating.id}, 색상=${floating.color}, 격자행=${floating.gridRow}`)
     })
+    
+    // 떨어지는 효과 생성
+    if (toRemove.length > 0) {
+      createFallingEffect(toRemove)
+    }
     
     for (let bubble of toRemove) {
       const index = state.bubbles.indexOf(bubble)
@@ -1022,10 +1130,31 @@ export default function BubbleShooter() {
       drawBubble(ctx, bubblePos.x, bubblePos.y, bubble.color)
     }
     
+    // 떨어지는 버블들 그리기
+    for (let falling of state.fallingBubbles) {
+      ctx.save()
+      ctx.translate(falling.x, falling.y)
+      ctx.rotate(falling.rotation)
+      ctx.globalAlpha = 0.8
+      drawBubble(ctx, 0, 0, falling.bubble.color)
+      ctx.restore()
+    }
+    
     // 현재 버블 그리기
     if (state.currentBubble) {
       drawBubble(ctx, state.currentBubble.x, state.currentBubble.y, state.currentBubble.color)
     }
+    
+    // 터지는 파티클들 그리기
+    for (let particle of state.popParticles) {
+      const alpha = particle.life / particle.maxLife
+      ctx.globalAlpha = alpha
+      ctx.fillStyle = particle.color
+      ctx.beginPath()
+      ctx.arc(particle.x, particle.y, particle.size * alpha, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 1.0
     
     // 조준선 그리기 (게임 진행 중일 때만)
     if (gameRunning && !gameOver && !state.currentBubble?.moving && state.trajectory) {
@@ -1039,8 +1168,6 @@ export default function BubbleShooter() {
       ctx.fillText('다음:', canvas.width - 70, canvas.height - 60)
       drawBubble(ctx, canvas.width - 35, canvas.height - 35, state.nextBubble.color)
     }
-    
-
     
     // 구슬라인 그리기 (시각적 참조용)
     drawShooterLine(ctx, canvas)
