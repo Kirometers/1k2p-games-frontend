@@ -31,6 +31,10 @@ interface CurrentBubble {
   dx: number
   dy: number
   moving: boolean
+  // 충돌 판정 개선을 위한 추가 상태
+  collisionCandidate?: Bubble | null  // 충돌 후보 버블
+  collisionFrames?: number            // 충돌 상태 지속 프레임 수
+  lastCollisionDistance?: number      // 마지막 충돌 거리
 }
 
 interface Trajectory {
@@ -428,7 +432,11 @@ export default function BubbleShooter() {
       color: state.nextBubble ? state.nextBubble.color : state.colors[Math.floor(Math.random() * state.colors.length)],
       dx: 0,
       dy: 0,
-      moving: false
+      moving: false,
+      // 충돌 상태 초기화
+      collisionCandidate: null,
+      collisionFrames: 0,
+      lastCollisionDistance: undefined
     }
   }
 
@@ -493,28 +501,162 @@ export default function BubbleShooter() {
       return
     }
     
-    // 다른 버블과 충돌 검사
+    // 개선된 충돌 검사
+    checkImprovedCollision()
+  }
+
+  const checkImprovedCollision = () => {
+    const state = gameStateRef.current
+    if (!state.currentBubble) return
+    
+    const currentBubble = state.currentBubble
     let closestBubble = null
     let minDistance = Infinity
     
+    // 1단계: 가장 가까운 버블 찾기
     for (let bubble of state.bubbles) {
       const bubblePos = getBubbleRenderPosition(bubble)
       const distance = Math.sqrt(
-        Math.pow(state.currentBubble.x - bubblePos.x, 2) + 
-        Math.pow(state.currentBubble.y - bubblePos.y, 2)
+        Math.pow(currentBubble.x - bubblePos.x, 2) + 
+        Math.pow(currentBubble.y - bubblePos.y, 2)
       )
       
-      if (distance <= BUBBLE_RADIUS * 2.1 && distance < minDistance) {
+      // 기본 충돌 거리 (2.0배로 적당히 조정)
+      if (distance <= BUBBLE_RADIUS * 2.0 && distance < minDistance) {
         minDistance = distance
         closestBubble = bubble
       }
     }
     
-    if (closestBubble && minDistance <= BUBBLE_RADIUS * 2.1) {
+    if (!closestBubble) {
+      // 충돌 후보가 없으면 충돌 상태 초기화
+      currentBubble.collisionCandidate = null
+      currentBubble.collisionFrames = 0
+      return
+    }
+    
+    // 2단계: 충돌 유형 분석
+    const bubblePos = getBubbleRenderPosition(closestBubble)
+    const collisionAnalysis = analyzeCollision(currentBubble, bubblePos, minDistance)
+    
+    // 3단계: 충돌 유형에 따른 처리
+    if (collisionAnalysis.shouldBlock) {
+      // 막혀있는 상황 - 즉시 붙이기
+      console.log(`[DEV] 🚫 막힌 충돌: ${collisionAnalysis.reason}`)
       attachBubble(closestBubble)
       return
     }
+    
+    if (collisionAnalysis.shouldPass) {
+      // 틈 통과 허용 - 충돌 무시
+      console.log(`[DEV] 🌊 틈 통과: ${collisionAnalysis.reason}`)
+      currentBubble.collisionCandidate = null
+      currentBubble.collisionFrames = 0
+      return
+    }
+    
+    // 4단계: 애매한 경우 - 유예 시간 적용
+    if (currentBubble.collisionCandidate === closestBubble) {
+      currentBubble.collisionFrames = (currentBubble.collisionFrames || 0) + 1
+      
+      // 2프레임 이상 지속되면 붙이기 (기존 3프레임에서 단축)
+      if (currentBubble.collisionFrames >= 2) {
+        console.log(`[DEV] 🎯 지연 충돌: ${currentBubble.collisionFrames}프레임`)
+        attachBubble(closestBubble)
+        return
+      }
+    } else {
+      currentBubble.collisionCandidate = closestBubble
+      currentBubble.collisionFrames = 1
+    }
+    
+    currentBubble.lastCollisionDistance = minDistance
   }
+
+  const analyzeCollision = (currentBubble: CurrentBubble, targetPos: {x: number, y: number}, distance: number) => {
+    // 이동 방향 벡터
+    const moveVector = { x: currentBubble.dx, y: currentBubble.dy }
+    const moveSpeed = Math.sqrt(moveVector.x * moveVector.x + moveVector.y * moveVector.y)
+    
+    if (moveSpeed === 0) {
+      return { shouldBlock: true, shouldPass: false, reason: "정지 상태" }
+    }
+    
+    // 정규화된 이동 방향
+    const moveDir = { x: moveVector.x / moveSpeed, y: moveVector.y / moveSpeed }
+    
+    // 현재 위치에서 타겟으로의 벡터
+    const toTarget = { 
+      x: targetPos.x - currentBubble.x, 
+      y: targetPos.y - currentBubble.y 
+    }
+    const toTargetDistance = Math.sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y)
+    
+    if (toTargetDistance === 0) {
+      return { shouldBlock: true, shouldPass: false, reason: "동일 위치" }
+    }
+    
+    // 정규화된 타겟 방향
+    const toTargetDir = { x: toTarget.x / toTargetDistance, y: toTarget.y / toTargetDistance }
+    
+    // 이동 방향과 타겟 방향의 내적 (코사인 값)
+    const dot = moveDir.x * toTargetDir.x + moveDir.y * toTargetDir.y
+    
+    // 1. 매우 가까운 거리 - 무조건 막기
+    if (distance < BUBBLE_RADIUS * 1.7) {
+      return { shouldBlock: true, shouldPass: false, reason: `매우 근접 (${distance.toFixed(1)})` }
+    }
+    
+    // 2. 정면 충돌 (cos > 0.7, 약 45도 이내) - 막기
+    if (dot > 0.7) {
+      return { shouldBlock: true, shouldPass: false, reason: `정면 충돌 (cos=${dot.toFixed(2)})` }
+    }
+    
+    // 3. 역방향 이동 (cos < -0.3) - 지나가는 중
+    if (dot < -0.3) {
+      return { shouldPass: true, shouldBlock: false, reason: `역방향 이동 (cos=${dot.toFixed(2)})` }
+    }
+    
+    // 4. 측면 스치기 (0.7 > cos > -0.3) - 거리와 주변 상황 고려
+    
+    // 주변에 다른 버블들이 있는지 확인 (빽빽한 상황 감지)
+    const nearbyBubbles = countNearbyBubbles(targetPos)
+    
+    // 빽빽한 상황 (주변에 3개 이상 버블) - 막기
+    if (nearbyBubbles >= 3) {
+      return { shouldBlock: true, shouldPass: false, reason: `빽빽한 지역 (주변 ${nearbyBubbles}개)` }
+    }
+    
+    // 상대적으로 여유로운 상황 - 거리에 따라 판단
+    if (distance > BUBBLE_RADIUS * 1.85) {
+      return { shouldPass: true, shouldBlock: false, reason: `여유로운 틈 (${distance.toFixed(1)})` }
+    }
+    
+    // 애매한 상황 - 유예 시간 적용
+    return { shouldBlock: false, shouldPass: false, reason: `애매한 상황 (cos=${dot.toFixed(2)}, dist=${distance.toFixed(1)})` }
+  }
+
+  const countNearbyBubbles = (centerPos: {x: number, y: number}): number => {
+    const state = gameStateRef.current
+    let count = 0
+    const checkRadius = BUBBLE_RADIUS * 3 // 3배 반경 내 버블 개수 확인
+    
+    for (let bubble of state.bubbles) {
+      const bubblePos = getBubbleRenderPosition(bubble)
+      const distance = Math.sqrt(
+        Math.pow(centerPos.x - bubblePos.x, 2) + 
+        Math.pow(centerPos.y - bubblePos.y, 2)
+      )
+      
+      if (distance <= checkRadius) {
+        count++
+      }
+    }
+    
+    return count
+  }
+
+
 
   const updateAnimations = () => {
     const state = gameStateRef.current
