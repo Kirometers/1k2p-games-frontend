@@ -185,7 +185,7 @@ body {
   box-shadow: var(--shadow-glow);
   width: 100%;
   max-height: 100%;
-  overflow-y: auto;
+  overflow: visible; /* 스크롤 제거 */
   animation: containerFloat 3s ease-in-out infinite;
 }
 
@@ -200,11 +200,12 @@ body {
 }
 
 .themed-title {
-  font-family: 'Fredoka One', cursive;
+  font-family: 'Fredoka One', cursive !important; /* !important 추가로 강제 적용 */
   font-size: 2.5rem;
   color: var(--soft-white);
   text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
-  margin-bottom: 10px;
+  margin-bottom: 20px; /* 간격 늘림 */
+  font-weight: 400; /* Fredoka One의 기본 weight */
 }
 
 .subtitle {
@@ -212,6 +213,7 @@ body {
   font-size: 1.2rem;
   font-weight: 600;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  margin-top: 15px; /* 위쪽 여백 추가 */
 }
 
 /* Cute Buttons */
@@ -277,60 +279,128 @@ body {
   transform: none;
 }
 
-/* Difficulty Cards */
-.difficulty-options {
+/* 새로운 모드 선택 UI */
+.mode-selection-grid {
   display: flex;
-  gap: 30px;
+  gap: 40px;
   justify-content: center;
-  margin-bottom: 30px;
+  margin-bottom: 40px;
   flex-wrap: wrap;
 }
 
-.difficulty-card {
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(15px);
-  border: 2px solid var(--glass-border);
-  border-radius: 20px;
-  padding: 30px;
+.mode-card {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(20px);
+  border: 3px solid transparent;
+  border-radius: 25px;
+  padding: 25px 20px; /* 35px 25px에서 축소 */
   cursor: pointer;
   transition: all 0.3s ease;
-  text-align: center;
-  min-width: 200px;
+  width: 240px; /* 280px에서 240px로 축소 */
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 20px; /* 25px에서 20px로 축소 */
 }
 
-.difficulty-card:hover {
+.mode-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 22px;
+  padding: 3px;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.mode-card:hover::before {
+  opacity: 1;
+}
+
+.normal-mode {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 197, 253, 0.05));
+}
+
+.normal-mode:hover {
+  border-color: rgba(59, 130, 246, 0.8);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 197, 253, 0.1));
   transform: translateY(-5px) scale(1.02);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  border-color: var(--accent-yellow);
+  box-shadow: 0 15px 35px rgba(59, 130, 246, 0.3);
 }
 
-.difficulty-card.normal:hover {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(59, 130, 246, 0.3));
+.hard-mode {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(252, 165, 165, 0.05));
 }
 
-.difficulty-card.hard:hover {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(168, 85, 247, 0.3));
+.hard-mode:hover {
+  border-color: rgba(239, 68, 68, 0.8);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(252, 165, 165, 0.1));
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 15px 35px rgba(239, 68, 68, 0.3);
 }
 
-.card-icon {
-  font-size: 3rem;
-  margin-bottom: 15px;
+.mode-header {
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 15px; /* 20px에서 15px로 축소 */
 }
 
-.card-content h3 {
+.mode-title {
   font-family: 'Fredoka One', cursive;
+  font-size: 2.2rem;
   color: var(--soft-white);
-  font-size: 1.5rem;
-  margin-bottom: 15px;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  margin-bottom: 8px;
 }
 
-.card-details p {
-  color: rgba(255, 255, 255, 0.9);
-  margin: 5px 0;
+.mode-subtitle {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1rem;
   font-weight: 600;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.mode-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* 15px에서 12px로 축소 */
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 12px 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.detail-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(5px);
+}
+
+.detail-icon {
+  font-size: 1.3rem;
+  width: 25px;
+  text-align: center;
+}
+
+.detail-text {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  font-size: 1rem;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
 }
 
@@ -607,7 +677,7 @@ body {
 .game-main-split {
   display: flex;
   gap: 30px;
-  align-items: center; /* CENTER alignment instead of stretch */
+  align-items: center; /* CENTER alignment for natural sizing */
   justify-content: center;
   width: 100%;
   height: 100%;
@@ -668,10 +738,9 @@ body {
   justify-content: flex-start; /* Start from top */
 }
 
-/* Timer Bar - MATCH GAME BOARD HEIGHT */
+/* Timer Bar - MATCH GAME BOARD HEIGHT - FIXED HEIGHTS */
 .timer-bar-split {
   width: 25px;
-  height: 500px; /* Default height for 10x10 */
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(15px);
   border: 2px solid var(--glass-border);
@@ -682,13 +751,13 @@ body {
   flex-shrink: 0;
 }
 
-/* Dynamic height for different grid sizes */
+/* Dynamic height for different grid sizes - FIXED HEIGHTS */
 .timer-bar-split.grid-10 {
-  height: 500px; /* 10x10 grid = 500px */
+  height: 500px; /* 10x10 grid = 500px (10 * 50px) */
 }
 
 .timer-bar-split.grid-12 {
-  height: 600px; /* 12x12 grid = 600px */
+  height: 600px; /* 12x12 grid = 600px (12 * 50px) */
 }
 
 /* Timer Text - Fixed position at bottom */
@@ -741,7 +810,7 @@ body {
   /* Remove height: 100% to allow natural sizing */
 }
 
-/* Score Display - NATURAL HEIGHT */
+/* Score Display - NATURAL HEIGHT - FIXED SIZE */
 .score-display-split {
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(15px);
@@ -754,7 +823,9 @@ body {
   flex-direction: column;
   justify-content: center;
   margin-bottom: 20px;
-  /* Remove flex: 1 to allow natural sizing */
+  /* Fixed height to match game board proportionally */
+  height: auto; /* Natural height based on content */
+  min-height: 120px; /* Minimum height for consistency */
 }
 
 .score-label-split {
@@ -1022,8 +1093,9 @@ body {
   left: 0;
   width: 100%;
   background: linear-gradient(180deg, var(--accent-yellow) 0%, var(--accent-orange) 100%);
-  border-radius: 20px;
+  border-radius: 15px;
   transition: height 0.3s ease;
+  will-change: height; /* GPU 가속 최적화 */
 }
 
 .timer-text {
@@ -1157,8 +1229,9 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  /* Smooth animations for both falling and swapping */
-  transition: top 0.5s ease-out, left 0.3s ease-out;
+  /* GPU 가속 애니메이션 - 성능 최적화 */
+  transition: transform 0.2s ease-in-out, top 0.4s ease-out, left 0.3s ease-out;
+  will-change: transform, opacity, top, left; /* 성능 최적화 힌트 */
   user-select: none;
 }
 
@@ -1175,15 +1248,70 @@ body {
   z-index: 10;
 }
 
+/* 팝 터지는 효과 - 네온 테두리 + 마법같은 색상 */
+@keyframes popAnimation {
+  0% { 
+    transform: scale(1); 
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    box-shadow: none;
+  }
+  30% { 
+    transform: scale(1.2); 
+    opacity: 1;
+    background: linear-gradient(45deg, rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.9));
+    border: 3px solid #a855f7;
+    box-shadow: 
+      0 0 15px rgba(168, 85, 247, 0.8),
+      0 0 30px rgba(236, 72, 153, 0.6),
+      inset 0 0 15px rgba(168, 85, 247, 0.3); /* 네온 내부 글로우 */
+  }
+  30.1% {
+    /* 네온 테두리 효과 - 이중 테두리 */
+    border: 3px solid #a855f7;
+    box-shadow: 
+      0 0 15px rgba(168, 85, 247, 0.8),
+      0 0 30px rgba(236, 72, 153, 0.6),
+      inset 0 0 15px rgba(168, 85, 247, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.6); /* 외부 화이트 테두리 */
+  }
+  70% {
+    transform: scale(1.1);
+    opacity: 0.8;
+    background: linear-gradient(45deg, rgba(236, 72, 153, 0.8), rgba(59, 130, 246, 0.8));
+    border: 3px solid #3b82f6;
+    box-shadow: 
+      0 0 20px rgba(59, 130, 246, 0.7),
+      0 0 40px rgba(236, 72, 153, 0.5),
+      inset 0 0 20px rgba(59, 130, 246, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.4);
+  }
+  100% { 
+    transform: scale(0.1); 
+    opacity: 0;
+    background: linear-gradient(45deg, rgba(59, 130, 246, 0.6), rgba(16, 185, 129, 0.6));
+    border: 3px solid #10b981;
+    box-shadow: 
+      0 0 25px rgba(16, 185, 129, 0.6),
+      0 0 50px rgba(59, 130, 246, 0.4),
+      inset 0 0 25px rgba(16, 185, 129, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.2);
+  }
+}
+
+.game-block-absolute.block-popping {
+  animation: popAnimation 0.2s ease-out forwards;
+  z-index: 15; /* 다른 블록보다 위에 보이게 */
+  will-change: transform, opacity, background, border, box-shadow; /* GPU 가속 힌트 */
+  border-radius: 12px; /* 네온 효과가 더 예쁘게 보이도록 */
+}
+
 .game-block-absolute.matched {
-  /* 터지는 효과: 커지면서 밝아지고 사라짐 */
-  transform: scale(1.3);
   opacity: 0;
-  background: rgba(255, 255, 255, 0.8);
-  border-color: #FFD700;
-  box-shadow: 0 0 25px rgba(255, 215, 0, 0.8);
-  transition: all 0.4s ease-out;
-  z-index: 15;
+  transform: scale(0.1);
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+  pointer-events: none;
 }
 
 .game-block-absolute.hinted {
@@ -1206,7 +1334,7 @@ body {
 
 .game-block-absolute.processing {
   pointer-events: none;
-  opacity: 0.8;
+  /* opacity 제거 - 화면이 어두워지는 효과 없애기 */
 }
 
 .game-block {
@@ -1260,22 +1388,23 @@ body {
 
 .game-block.processing {
   pointer-events: none;
-  opacity: 0.8;
+  /* opacity 제거 - 화면이 어두워지는 효과 없애기 */
 }
 
 .block-image {
   width: 80%;
   height: 80%;
   object-fit: contain;
-  transition: all 0.4s ease-out;
+  /* GPU 가속 최적화 */
+  transition: transform 0.2s ease-in-out;
+  will-change: transform;
+  pointer-events: none; /* 이미지 자체는 클릭 이벤트 차단 */
 }
 
-.game-block.matched .block-image,
-.game-block-absolute.matched .block-image {
-  /* 터지는 효과: 이미지도 함께 커지면서 밝아짐 */
-  transform: scale(1.2);
-  opacity: 0;
-  filter: brightness(2) saturate(1.5);
+/* 터지는 블록의 이미지 효과 - 최적화 */
+.game-block-absolute.block-popping .block-image {
+  /* 이미지도 함께 터지는 효과 - GPU 가속 */
+  will-change: transform, opacity;
 }
 
 /* Drag Selection Overlay - Limited to 2 blocks max */
@@ -1700,15 +1829,9 @@ body {
 .game-over-title {
   font-family: 'Fredoka One', cursive;
   font-size: 3rem;
-  background: linear-gradient(45deg, #ff4757, #ff6b7a, #ff8c94);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: 
-    3px 3px 0px rgba(255, 71, 87, 0.8),
-    -2px -2px 0px rgba(255, 255, 255, 0.3);
+  color: var(--soft-white);
+  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
   margin: 0;
-  animation: titlePulse 2s ease-in-out infinite;
 }
 
 .game-over-content {
@@ -1724,7 +1847,6 @@ body {
   border-radius: 20px;
   padding: 25px 40px;
   margin-bottom: 20px;
-  animation: scoreGlow 2s ease-in-out infinite;
 }
 
 .final-score-display .score-label {
@@ -1737,16 +1859,11 @@ body {
 
 .final-score-display .score-value {
   font-family: 'Fredoka One', cursive;
-  font-size: 3.5rem;
-  background: linear-gradient(45deg, #FFD700, #FFA500, #FF8C00);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: 
-    3px 3px 0px rgba(255, 140, 0, 0.8),
-    -1px -1px 0px rgba(255, 255, 255, 0.3);
+  font-size: 2.8rem; /* 3.5rem에서 2.8rem으로 축소 */
+  color: var(--accent-yellow);
+  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
   margin: 0;
-  animation: scoreSparkle 1.5s ease-in-out infinite;
+  line-height: 1.1; /* 줄 간격 조정 */
 }
 
 .game-over-message {
@@ -1814,48 +1931,6 @@ body {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes titlePulse {
-  0%, 100% {
-    transform: scale(1);
-    text-shadow: 
-      3px 3px 0px rgba(255, 71, 87, 0.8),
-      -2px -2px 0px rgba(255, 255, 255, 0.3);
-  }
-  50% {
-    transform: scale(1.05);
-    text-shadow: 
-      4px 4px 0px rgba(255, 71, 87, 1),
-      -3px -3px 0px rgba(255, 255, 255, 0.5),
-      0 0 20px rgba(255, 71, 87, 0.6);
-  }
-}
-
-@keyframes scoreGlow {
-  0%, 100% {
-    border-color: rgba(255, 215, 0, 0.5);
-    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
-  }
-  50% {
-    border-color: rgba(255, 215, 0, 0.8);
-    box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
-  }
-}
-
-@keyframes scoreSparkle {
-  0%, 100% {
-    transform: scale(1);
-  }
-  25% {
-    transform: scale(1.02);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  75% {
-    transform: scale(1.02);
   }
 }
 

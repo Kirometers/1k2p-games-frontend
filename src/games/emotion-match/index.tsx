@@ -31,6 +31,7 @@ interface GameData {
   isProcessing: boolean
   isHintActive: boolean
   hintBlocks: Position[]
+  poppingBlocks: string[] // 터지는 애니메이션 중인 블록들의 ID
   dragState: {
     isDragging: boolean
     startPos: Position | null
@@ -69,6 +70,8 @@ type GameAction =
   | { type: 'CLEAR_SELECTION' }
   | { type: 'SET_ANIMATING'; payload: boolean }
   | { type: 'SET_PROCESSING'; payload: boolean }
+  | { type: 'SET_POPPING_BLOCKS'; payload: string[] }
+  | { type: 'CLEAR_POPPING_BLOCKS' }
   | { type: 'START_DRAG'; payload: { pos: Position; coords: { x: number; y: number } } }
   | { type: 'UPDATE_DRAG'; payload: { x: number; y: number } }
   | { type: 'END_DRAG' }
@@ -89,6 +92,7 @@ const initialState: GameData = {
   isProcessing: false,
   isHintActive: false,
   hintBlocks: [],
+  poppingBlocks: [], // 터지는 애니메이션 중인 블록들의 ID
   dragState: {
     isDragging: false,
     startPos: null,
@@ -130,6 +134,10 @@ function gameReducer(state: GameData, action: GameAction): GameData {
       return { ...state, isAnimating: action.payload }
     case 'SET_PROCESSING':
       return { ...state, isProcessing: action.payload }
+    case 'SET_POPPING_BLOCKS':
+      return { ...state, poppingBlocks: action.payload }
+    case 'CLEAR_POPPING_BLOCKS':
+      return { ...state, poppingBlocks: [] }
     case 'START_DRAG':
       return { 
         ...state, 
@@ -166,6 +174,7 @@ function gameReducer(state: GameData, action: GameAction): GameData {
         selectedBlocks: [],
         isHintActive: false,
         hintBlocks: [],
+        poppingBlocks: [], // 터지는 블록 ID 목록 클리어
         dragState: {
           isDragging: false,
           startPos: null,
@@ -353,7 +362,7 @@ export default function EmotionMatch() {
     return newBoard
   }, [])
 
-  // Process matches and update score - IMPROVED VFX TIMING
+  // Process matches and update score - OPTIMIZED VFX WITH NO LAG
   const processMatches = useCallback(async (board: Block[][]): Promise<Block[][]> => {
     let currentBoard = board.map((row: Block[]) => [...row])
     let totalScore = 0
@@ -371,20 +380,17 @@ export default function EmotionMatch() {
           break
         }
 
-        // STEP 1: 즉시 시각적 효과 적용 (터지는 애니메이션)
-        matches.forEach((pos: Position) => {
+        // STEP 1: 즉시 터지는 애니메이션 시작 (블록 ID 기반으로 정확한 블록만)
+        const matchedBlockIds = matches.map((pos: Position) => {
           if (currentBoard[pos.row] && currentBoard[pos.row][pos.col]) {
-            currentBoard[pos.row][pos.col].isMatched = true
+            return currentBoard[pos.row][pos.col].id
           }
-        })
+          return null
+        }).filter(id => id !== null) as string[]
+        
+        dispatch({ type: 'SET_POPPING_BLOCKS', payload: matchedBlockIds })
 
-        // 즉시 보드 업데이트하여 터지는 애니메이션 시작
-        dispatch({ type: 'SET_BOARD', payload: [...currentBoard] })
-
-        // STEP 2: 애니메이션 시간 대기 (0.4초)
-        await new Promise(resolve => setTimeout(resolve, 400))
-
-        // STEP 3: 점수 계산
+        // STEP 2: 점수 계산 (미리 계산)
         const matchGroups = new Map<string, number>()
         matches.forEach((pos: Position) => {
           if (currentBoard[pos.row] && currentBoard[pos.row][pos.col]) {
@@ -400,11 +406,33 @@ export default function EmotionMatch() {
           else if (count >= 6) totalScore += 10
         })
 
-        // STEP 4: 실제 데이터 삭제 및 중력 적용
+        // STEP 3: 애니메이션 시간 대기 (0.2초로 단축)
+        await new Promise(resolve => setTimeout(resolve, 200))
+
+        // STEP 4: 애니메이션 완료 후 실제 데이터 삭제 (매치된 블록만)
+        matches.forEach((pos: Position) => {
+          if (currentBoard[pos.row] && currentBoard[pos.row][pos.col]) {
+            currentBoard[pos.row][pos.col].isMatched = true
+          }
+        })
+
+        // STEP 5: 터지는 애니메이션 상태 클리어
+        dispatch({ type: 'CLEAR_POPPING_BLOCKS' })
+
+        // STEP 6: 매치된 블록들만 사라진 상태로 보드 업데이트 (사용자가 볼 수 있게)
+        dispatch({ type: 'SET_BOARD', payload: currentBoard })
+        
+        // 사라진 블록들을 확인할 수 있는 짧은 대기
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        // STEP 7: 중력 적용 및 새 블록 생성 (이제 빈 공간을 채움)
         currentBoard = applyGravity(currentBoard, gameData.selectedCharacters)
         
-        // 새로운 블록들이 떨어지는 애니메이션을 위한 짧은 대기
-        await new Promise(resolve => setTimeout(resolve, 200))
+        // STEP 8: 블록들이 떨어진 후 보드 상태 업데이트
+        dispatch({ type: 'SET_BOARD', payload: currentBoard })
+        
+        // 새로운 블록들이 떨어지는 애니메이션을 위한 대기
+        await new Promise(resolve => setTimeout(resolve, 400)) // 0.5초 → 0.4초로 단축
       }
 
       if (totalScore > 0) {
@@ -416,6 +444,7 @@ export default function EmotionMatch() {
       console.error('Error in processMatches:', error)
     } finally {
       // 항상 애니메이션 상태 해제
+      dispatch({ type: 'CLEAR_POPPING_BLOCKS' })
       dispatch({ type: 'SET_ANIMATING', payload: false })
       dispatch({ type: 'SET_PROCESSING', payload: false })
     }
@@ -987,42 +1016,60 @@ export default function EmotionMatch() {
         <div className="themed-screen-content">
           <div className="themed-container">
             <div className="container-header">
-              <h2 className="themed-title">🎮 게임 모드 선택</h2>
+              <h2 className="themed-title">🎮 Select Game Mode</h2>
             </div>
             
-            <div className="difficulty-options">
+            <div className="mode-selection-grid">
               <div 
-                className="difficulty-card normal"
+                className="mode-card normal-mode"
                 onClick={() => {
                   dispatch({ type: 'SET_DIFFICULTY', payload: 'normal' })
                   dispatch({ type: 'SET_STATE', payload: 'character-select' })
                 }}
               >
-                <div className="card-icon">👻</div>
-                <div className="card-content">
-                  <h3>Normal Mode</h3>
-                  <div className="card-details">
-                    <p>10×10 그리드</p>
-                    <p>6개 캐릭터 선택</p>
-                    <p>초보자 추천!</p>
+                <div className="mode-header">
+                  <div className="mode-title">Normal</div>
+                  <div className="mode-subtitle">Perfect for beginners</div>
+                </div>
+                <div className="mode-details">
+                  <div className="detail-item">
+                    <span className="detail-icon">📏</span>
+                    <span className="detail-text">10×10 Grid</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-icon">👻</span>
+                    <span className="detail-text">6 Characters</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-icon">⭐</span>
+                    <span className="detail-text">Recommended</span>
                   </div>
                 </div>
               </div>
               
               <div 
-                className="difficulty-card hard"
+                className="mode-card hard-mode"
                 onClick={() => {
                   dispatch({ type: 'SET_DIFFICULTY', payload: 'hard' })
                   dispatch({ type: 'SET_STATE', payload: 'character-select' })
                 }}
               >
-                <div className="card-icon">💀</div>
-                <div className="card-content">
-                  <h3>Hard Mode</h3>
-                  <div className="card-details">
-                    <p>12×12 그리드</p>
-                    <p>8개 캐릭터 선택</p>
-                    <p>도전자 전용!</p>
+                <div className="mode-header">
+                  <div className="mode-title">Hard</div>
+                  <div className="mode-subtitle">For experienced players</div>
+                </div>
+                <div className="mode-details">
+                  <div className="detail-item">
+                    <span className="detail-icon">📏</span>
+                    <span className="detail-text">12×12 Grid</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-icon">👻</span>
+                    <span className="detail-text">8 Characters</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-icon">🔥</span>
+                    <span className="detail-text">Challenge</span>
                   </div>
                 </div>
               </div>
@@ -1033,7 +1080,7 @@ export default function EmotionMatch() {
                 className="cute-button secondary"
                 onClick={() => dispatch({ type: 'SET_STATE', payload: 'menu' })}
               >
-                🔙 메인으로
+                🔙 Back to Menu
               </button>
             </div>
           </div>
@@ -1048,9 +1095,9 @@ export default function EmotionMatch() {
         <div className="themed-screen-content">
           <div className="themed-container character-select">
             <div className="container-header">
-              <h2 className="themed-title">👻 캐릭터 선택</h2>
+              <h2 className="themed-title">👻 Character Selection</h2>
               <p className="subtitle">
-                {gameData.difficulty === 'normal' ? '6개' : '8개'}의 유령 친구들을 선택하세요!
+                Choose {gameData.difficulty === 'normal' ? '6' : '8'} ghost friends for your adventure!
               </p>
             </div>
             
@@ -1075,7 +1122,7 @@ export default function EmotionMatch() {
               
               <div className="selection-status">
                 <div className="status-text">
-                  선택됨: {gameData.selectedCharacters.length}/{requiredCharacters}
+                  Selected: {gameData.selectedCharacters.length}/{requiredCharacters}
                 </div>
                 <div className="selection-progress">
                   <div 
@@ -1092,14 +1139,14 @@ export default function EmotionMatch() {
                   className="cute-button secondary"
                   onClick={() => dispatch({ type: 'SET_STATE', payload: 'difficulty' })}
                 >
-                  🔙 뒤로가기
+                  🔙 Back
                 </button>
                 
                 <button 
                   className="cute-button magic"
                   onClick={selectRandomCharacters}
                 >
-                  🎲 랜덤 선택
+                  🎲 Random
                 </button>
                 
                 <button 
@@ -1107,7 +1154,7 @@ export default function EmotionMatch() {
                   disabled={gameData.selectedCharacters.length !== requiredCharacters}
                   onClick={startGame}
                 >
-                  🚀 게임 시작!
+                  🚀 Start Game!
                 </button>
               </div>
             </div>
@@ -1163,6 +1210,7 @@ export default function EmotionMatch() {
                     
                     const isSelected = gameData.selectedBlocks.some((pos: Position) => pos.row === rowIndex && pos.col === colIndex)
                     const isHinted = gameData.hintBlocks.some((pos: Position) => pos.row === rowIndex && pos.col === colIndex)
+                    const isPopping = gameData.poppingBlocks.includes(block.id) // 블록 ID로 정확히 비교
                     
                     const cellSize = 50
                     
@@ -1172,6 +1220,8 @@ export default function EmotionMatch() {
                         className={`game-block-absolute ${
                           isSelected ? 'selected' : ''
                         } ${block.isMatched ? 'matched' : ''} ${isHinted ? 'hinted' : ''} ${block.isInvalid ? 'invalid' : ''} ${
+                          isPopping ? 'block-popping' : ''
+                        } ${
                           gameData.isProcessing ? 'processing' : ''
                         }`}
                         onMouseDown={(e) => handleMouseDown(e, rowIndex, colIndex)}
@@ -1304,7 +1354,7 @@ export default function EmotionMatch() {
             className="game-over-button main-menu-btn"
             onClick={() => dispatch({ type: 'RESET_GAME' })}
           >
-            🏠 메인 메뉴로
+            🏠 MAIN
           </button>
         </div>
       </div>
