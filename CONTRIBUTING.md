@@ -29,8 +29,13 @@ These rules keep the Cloudscape look intact and prevent cross-team conflicts.
    - Add a `game.ts` file in your game folder.
    - Export a default object that matches `GameMeta`.
    - Keep `id` stable and URL-safe (kebab-case).
-   - Keep `status` to one of: Open, Prototype, Planned.
+   - Keep `status` to one of: `open`, `prototype`, `planned`.
+   - Add `thumbnail` to show a square image on the hub cards (optional, 1:1).
+     - Recommended size: 256x256 or larger (min 128x128).
+   - Add `heroImage` to show a wide image under the card header (optional, 16:9).
+     - Recommended size: 1280x720 or larger (min 960x540).
    - Export a default React component from `index.tsx` for the game route.
+   - For hub text, prefer localized strings (`{ en, ko }`).
 
 4. Keep PRs reviewable
    - One game per PR.
@@ -65,6 +70,7 @@ Each game has its own folder under `src/games/`:
 
 ```
 src/games/<game-id>/
+  game.ts
   README.md
   index.tsx
   styles.css
@@ -78,8 +84,7 @@ src/games/<game-id>/
 
 - Your game UI should be self-contained.
 - If you need styles, scope them to your game folder only.
-- Use Cloudscape components where possible for consistency.
-- If you need custom layout or visuals, keep them local to the game.
+- You can use any UI stack or style inside your game folder.
 
 ## PR checklist
 
