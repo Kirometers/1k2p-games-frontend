@@ -25,7 +25,13 @@ if (process.env.BYPASS_GAME_SCOPE === 'true') {
   process.exit(0)
 }
 
-const changedFiles = getChangedFiles()
+const ignoredPrefixes = ['.vite/', '.kiro/']
+const allowedRootFiles = new Set(['package.json', 'package-lock.json', 'vite.config.ts'])
+const changedFiles = getChangedFiles().filter(
+  (file) =>
+    !ignoredPrefixes.some((prefix) => file.startsWith(prefix)) &&
+    !allowedRootFiles.has(file),
+)
 
 if (changedFiles.length === 0) {
   process.stdout.write('No file changes detected.\n')
