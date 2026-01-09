@@ -15,10 +15,20 @@ auto-load it.
 
 These rules keep the Cloudscape look intact and prevent cross-team conflicts.
 
+**Branch naming conventions:**
+- `feature/game-<game-id>-*` - Game development (scope check applies)
+- `feature/ui-*` - UI/layout changes (scope check skipped)
+- `feature/infra-*` - Infrastructure changes (scope check skipped)
+- `feature/core-*` - Core functionality (scope check skipped)
+- `chore/*` - Maintenance tasks (scope check skipped)
+- `docs/*` - Documentation only (scope check skipped)
+- `ci/*` - CI/CD changes (scope check skipped)
+
 1. Do not change global UI layout or styling
    - Avoid edits to `src/App.tsx`, `src/main.tsx`, and `src/index.css`.
    - Do not add global CSS resets or site-wide styles.
    - Use Cloudscape components and design tokens instead of custom CSS themes.
+   - **Exception:** Use `feature/ui-*` branch for intentional UI changes.
 
 2. Only touch your game folder
    - Put your work under `src/games/<game-id>/`.
@@ -41,7 +51,8 @@ These rules keep the Cloudscape look intact and prevent cross-team conflicts.
    - For hub text, prefer localized strings (`{ en, ko }`).
 
 4. Keep PRs reviewable
-   - One game per PR.
+   - One game per PR (for game contributions).
+   - Use appropriate branch naming (see above).
    - No unrelated refactors or dependency changes.
    - Include a short demo clip or screenshot in the PR description.
 
@@ -196,3 +207,22 @@ If your game requires specific deployment settings, you may modify:
 
 If a core maintainer needs to edit shared files, set `BYPASS_GAME_SCOPE=true`
 in the CI job or run the check locally with that env var.
+
+## For maintainers: UI and infrastructure development
+
+If you're working on the hub UI, core infrastructure, or CI/CD:
+
+1. **Use appropriate branch naming:**
+   - `feature/ui-*` for UI changes
+   - `feature/infra-*` for infrastructure
+   - `feature/core-*` for core functionality
+   - `chore/*` for maintenance
+   - `ci/*` for CI/CD changes
+
+2. **Game scope check will be automatically skipped** for these branches.
+
+3. **Still follow best practices:**
+   - Keep PRs focused and reviewable
+   - Test changes thoroughly
+   - Update documentation as needed
+   - Consider impact on existing games
