@@ -5,6 +5,7 @@ import gameclearKiroImage from './gameclear_kiro.png'
 import gameclearBgImage from './gameclear.png'
 import gameoverKiroImage from './gameover_kiro.png'
 import gameoverBgImage from './gameover.png'
+import startBgImage from './start.png'
 
 // 게임 상수
 const WALL_DESCENT_INTERVAL_MS = 30000  // 30초
@@ -72,9 +73,10 @@ interface FallingBubble {
 export default function BubbleShooter() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [score, setScore] = useState(0)
-  const [gameRunning, setGameRunning] = useState(true)
+  const [gameRunning, setGameRunning] = useState(false) // 시작 시 false로 변경
   const [gameOver, setGameOver] = useState(false)
   const [timeLeft, setTimeLeft] = useState(WALL_DESCENT_INTERVAL_MS / 1000)
+  const [gameState, setGameState] = useState<'start' | 'playing' | 'tutorial'>('start') // 게임 상태 추가
   
   // 엔딩 화면을 위한 상태
   const [gameResult, setGameResult] = useState<{
@@ -155,10 +157,18 @@ export default function BubbleShooter() {
     gameclearBgImage: null as HTMLImageElement | null,
     gameoverKiroImage: null as HTMLImageElement | null,
     gameoverBgImage: null as HTMLImageElement | null,
+    startBgImage: null as HTMLImageElement | null, // 시작 화면 배경 추가
     endingImagesLoaded: false,
     // 애니메이션 상태
     popParticles: [] as PopParticle[],
     fallingBubbles: [] as FallingBubble[],
+    // 키로 모션 상태
+    kiroMotion: {
+      type: 'idle' as 'idle' | 'jump' | 'spin' | 'bounce',
+      startTime: 0,
+      duration: 0,
+      intensity: 1
+    },
     // 엔딩 계산용 상태
     totalBubbles: 0,      // 스테이지 시작 시 총 버블 수
     clearedBubbles: 0     // 제거된 버블 수
@@ -296,6 +306,70 @@ export default function BubbleShooter() {
     }
   }
 
+  // 키로 모션 트리거 함수들
+  const triggerKiroMotion = (type: 'jump' | 'spin' | 'bounce', intensity: number = 1) => {
+    const state = gameStateRef.current
+    const now = Date.now()
+    
+    // 기존 모션이 진행 중이면 더 강한 모션으로만 교체
+    if (state.kiroMotion.type !== 'idle' && 
+        now - state.kiroMotion.startTime < state.kiroMotion.duration) {
+      if (intensity <= state.kiroMotion.intensity) return
+    }
+    
+    let duration = 800 // 기본 지속시간
+    if (type === 'jump') duration = 600
+    else if (type === 'spin') duration = 1200
+    else if (type === 'bounce') duration = 1000
+    
+    state.kiroMotion = {
+      type,
+      startTime: now,
+      duration: duration * intensity, // 강도에 따라 지속시간 조정
+      intensity
+    }
+    
+    console.log(`[DEV] 🎭 키로 모션 트리거: ${type}, 강도: ${intensity}, 지속시간: ${duration * intensity}ms`)
+  }
+
+  const getKiroTransform = () => {
+    const state = gameStateRef.current
+    const motion = state.kiroMotion
+    
+    if (motion.type === 'idle') return 'none'
+    
+    const now = Date.now()
+    const elapsed = now - motion.startTime
+    const progress = Math.min(elapsed / motion.duration, 1)
+    
+    // 모션이 끝났으면 idle로 복귀
+    if (progress >= 1) {
+      state.kiroMotion.type = 'idle'
+      return 'none'
+    }
+    
+    const easeOut = 1 - Math.pow(1 - progress, 3) // 부드러운 감속
+    const bounce = Math.sin(progress * Math.PI * 4) * (1 - progress) // 진동 효과
+    
+    switch (motion.type) {
+      case 'jump':
+        const jumpHeight = 15 * motion.intensity * (1 - Math.pow(progress - 0.5, 2) * 4)
+        return `translateY(${-Math.max(0, jumpHeight)}px)`
+        
+      case 'spin':
+        const rotation = 360 * motion.intensity * easeOut
+        return `rotate(${rotation}deg)`
+        
+      case 'bounce':
+        const bounceY = Math.abs(bounce) * 8 * motion.intensity
+        const bounceX = bounce * 3 * motion.intensity
+        return `translate(${bounceX}px, ${-bounceY}px)`
+        
+      default:
+        return 'none'
+    }
+  }
+
   const restartGame = () => {
     const state = gameStateRef.current
     
@@ -318,6 +392,7 @@ export default function BubbleShooter() {
     setGameRunning(true)
     setGameOver(false)
     setGameResult(null)
+    setGameState('playing') // 게임 상태를 playing으로 변경
     setTimeLeft(WALL_DESCENT_INTERVAL_MS / 1000)
     
     // 모든 타이머 정리
@@ -338,6 +413,29 @@ export default function BubbleShooter() {
     }
   }
 
+  const startNewGame = () => {
+    setGameState('playing')
+    setGameRunning(true)
+    restartGame()
+  }
+
+  const showTutorial = () => {
+    setGameState('tutorial')
+  }
+
+  const backToStart = () => {
+    setGameState('start')
+    setGameRunning(false)
+    setGameOver(false)
+    setGameResult(null)
+  }
+
+  // 컴포넌트 마운트 시 이미지 로드
+  useEffect(() => {
+    // 시작화면에서도 이미지를 미리 로드
+    loadEndingImages()
+  }, [])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -345,12 +443,18 @@ export default function BubbleShooter() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // 게임 초기화
-    initGame(canvas)
+    // 게임 상태가 playing일 때만 게임 초기화
+    if (gameState === 'playing') {
+      // 게임 초기화
+      initGame(canvas)
+      
+      // 30초 타이머 시작
+      startWallTimer()
+    }
     
-    // 게임 루프 시작
+    // 게임 루프 시작 (항상 실행하여 시작화면도 렌더링)
     const gameLoop = () => {
-      if (gameRunning) {
+      if (gameRunning && gameState === 'playing') {
         updateBubble()
       }
       draw(canvas, ctx)
@@ -358,12 +462,9 @@ export default function BubbleShooter() {
     }
     gameLoop()
 
-    // 30초 타이머 시작
-    startWallTimer()
-
     // 이벤트 리스너 설정
     const handleMouseMove = (e: MouseEvent) => {
-      if (!gameRunning || gameOver || gameStateRef.current.currentBubble?.moving) return
+      if (!gameRunning || gameOver || gameStateRef.current.currentBubble?.moving || gameState !== 'playing') return
       
       const rect = canvas.getBoundingClientRect()
       const mouseX = e.clientX - rect.left
@@ -373,7 +474,7 @@ export default function BubbleShooter() {
     }
 
     const handleClick = (e: MouseEvent) => {
-      if (!gameRunning || gameOver || gameStateRef.current.currentBubble?.moving) return
+      if (!gameRunning || gameOver || gameStateRef.current.currentBubble?.moving || gameState !== 'playing') return
       
       const rect = canvas.getBoundingClientRect()
       const mouseX = e.clientX - rect.left
@@ -409,7 +510,7 @@ export default function BubbleShooter() {
         clearInterval(gameStateRef.current.countdownTimer)
       }
     }
-  }, [gameRunning, gameOver])
+  }, [gameRunning, gameOver, gameState])
 
 
 
@@ -417,19 +518,18 @@ export default function BubbleShooter() {
     const state = gameStateRef.current
     state.shooter = { x: canvas.width / 2, y: canvas.height - 50 }
     
-    // 키로 이미지 로드
-    state.kiroImage = new Image()
-    state.kiroImage.src = kiroImage
-    state.kiroImage.onload = () => {
-      state.imageLoaded = true
+    // 키로 이미지 로드 (게임용)
+    if (!state.kiroImage) {
+      state.kiroImage = new Image()
+      state.kiroImage.src = kiroImage
+      state.kiroImage.onload = () => {
+        state.imageLoaded = true
+      }
+      state.kiroImage.onerror = () => {
+        console.warn('[DEV] kiro 이미지를 로드할 수 없습니다.')
+        state.imageLoaded = false
+      }
     }
-    state.kiroImage.onerror = () => {
-      console.warn('[DEV] kiro 이미지를 로드할 수 없습니다.')
-      state.imageLoaded = false
-    }
-    
-    // 엔딩 화면 이미지들 로드
-    loadEndingImages()
     
     // 초기 버블 배치
     createInitialBubbles()
@@ -440,49 +540,77 @@ export default function BubbleShooter() {
   const loadEndingImages = () => {
     const state = gameStateRef.current
     let loadedCount = 0
-    const totalImages = 4
+    const totalImages = 5 // 시작 화면 이미지 추가로 5개
+    
+    console.log('[DEV] 🖼️ 이미지 로딩 시작 - 총 5개 이미지')
     
     const checkAllLoaded = () => {
       loadedCount++
+      console.log(`[DEV] 🖼️ 이미지 로드 진행: ${loadedCount}/${totalImages}`)
       if (loadedCount === totalImages) {
         state.endingImagesLoaded = true
-        console.log('[DEV] 모든 엔딩 이미지 로드 완료')
+        console.log('[DEV] ✅ 모든 이미지 로드 완료!')
       }
+    }
+    
+    // 시작 화면 배경 이미지
+    console.log('[DEV] 🖼️ start.png 로딩 시작...')
+    state.startBgImage = new Image()
+    state.startBgImage.src = startBgImage
+    state.startBgImage.onload = () => {
+      console.log('[DEV] ✅ start.png 로드 성공')
+      checkAllLoaded()
+    }
+    state.startBgImage.onerror = () => {
+      console.warn('[DEV] ❌ start 배경 이미지 로드 실패')
+      checkAllLoaded()
     }
     
     // 게임 클리어 키로 이미지
     state.gameclearKiroImage = new Image()
     state.gameclearKiroImage.src = gameclearKiroImage
-    state.gameclearKiroImage.onload = checkAllLoaded
+    state.gameclearKiroImage.onload = () => {
+      console.log('[DEV] ✅ gameclear_kiro.png 로드 성공')
+      checkAllLoaded()
+    }
     state.gameclearKiroImage.onerror = () => {
-      console.warn('[DEV] gameclear_kiro 이미지 로드 실패')
+      console.warn('[DEV] ❌ gameclear_kiro 이미지 로드 실패')
       checkAllLoaded()
     }
     
     // 게임 클리어 배경 이미지
     state.gameclearBgImage = new Image()
     state.gameclearBgImage.src = gameclearBgImage
-    state.gameclearBgImage.onload = checkAllLoaded
+    state.gameclearBgImage.onload = () => {
+      console.log('[DEV] ✅ gameclear.png 로드 성공')
+      checkAllLoaded()
+    }
     state.gameclearBgImage.onerror = () => {
-      console.warn('[DEV] gameclear 배경 이미지 로드 실패')
+      console.warn('[DEV] ❌ gameclear 배경 이미지 로드 실패')
       checkAllLoaded()
     }
     
     // 게임 오버 키로 이미지
     state.gameoverKiroImage = new Image()
     state.gameoverKiroImage.src = gameoverKiroImage
-    state.gameoverKiroImage.onload = checkAllLoaded
+    state.gameoverKiroImage.onload = () => {
+      console.log('[DEV] ✅ gameover_kiro.png 로드 성공')
+      checkAllLoaded()
+    }
     state.gameoverKiroImage.onerror = () => {
-      console.warn('[DEV] gameover_kiro 이미지 로드 실패')
+      console.warn('[DEV] ❌ gameover_kiro 이미지 로드 실패')
       checkAllLoaded()
     }
     
     // 게임 오버 배경 이미지
     state.gameoverBgImage = new Image()
     state.gameoverBgImage.src = gameoverBgImage
-    state.gameoverBgImage.onload = checkAllLoaded
+    state.gameoverBgImage.onload = () => {
+      console.log('[DEV] ✅ gameover.png 로드 성공')
+      checkAllLoaded()
+    }
     state.gameoverBgImage.onerror = () => {
-      console.warn('[DEV] gameover 배경 이미지 로드 실패')
+      console.warn('[DEV] ❌ gameover 배경 이미지 로드 실패')
       checkAllLoaded()
     }
   }
@@ -1092,6 +1220,17 @@ export default function BubbleShooter() {
       
       console.log(`[DEV] ✅ 매칭 성공! ${matches.length}개 버블 제거 시작`)
       
+      // 키로 모션 트리거 (버블 개수에 따라 다른 모션)
+      if (matches.length >= 8) {
+        triggerKiroMotion('spin', 2) // 8개 이상: 큰 회전
+      } else if (matches.length >= 6) {
+        triggerKiroMotion('spin', 1.5) // 6개 이상: 회전
+      } else if (matches.length >= 4) {
+        triggerKiroMotion('jump', 1.5) // 4개 이상: 큰 점프
+      } else {
+        triggerKiroMotion('jump', 1) // 3개: 작은 점프
+      }
+      
       // 터지는 효과 생성
       matches.forEach(match => {
         const pos = getBubbleRenderPosition(match)
@@ -1220,6 +1359,15 @@ export default function BubbleShooter() {
     // 떨어지는 효과 생성
     if (toRemove.length > 0) {
       createFallingEffect(toRemove)
+      
+      // 키로 모션 트리거 (떨어지는 버블 개수에 따라)
+      if (toRemove.length >= 10) {
+        triggerKiroMotion('spin', 2.5) // 10개 이상: 매우 큰 회전
+      } else if (toRemove.length >= 6) {
+        triggerKiroMotion('spin', 1.8) // 6개 이상: 큰 회전
+      } else if (toRemove.length >= 3) {
+        triggerKiroMotion('bounce', 1.5) // 3개 이상: 바운스
+      }
       
       // 제거된 버블 수 누적 (벽 블록 제외)
       const removedNormalBubbles = toRemove.filter(bubble => !bubble.isWall).length
@@ -1530,6 +1678,14 @@ export default function BubbleShooter() {
   const draw = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
     const state = gameStateRef.current
     
+    // 시작화면이나 튜토리얼 화면일 때는 게임 요소를 그리지 않음
+    if (gameState === 'start' || gameState === 'tutorial') {
+      // 검은 배경만 그리기
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      return
+    }
+    
     // 화면 지우기
     ctx.fillStyle = '#000'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -1776,12 +1932,50 @@ export default function BubbleShooter() {
     const kiroY = state.shooter.y + 10
     const size = 70 // 기존 유령과 비슷한 크기
     
+    // 키로 모션 변환 적용
+    ctx.save()
+    ctx.translate(kiroX, kiroY)
+    
+    // 모션에 따른 변환 적용
+    const motion = state.kiroMotion
+    if (motion.type !== 'idle') {
+      const now = Date.now()
+      const elapsed = now - motion.startTime
+      const progress = Math.min(elapsed / motion.duration, 1)
+      
+      if (progress < 1) {
+        const easeOut = 1 - Math.pow(1 - progress, 3)
+        const bounce = Math.sin(progress * Math.PI * 4) * (1 - progress)
+        
+        switch (motion.type) {
+          case 'jump':
+            const jumpHeight = 15 * motion.intensity * (1 - Math.pow(progress - 0.5, 2) * 4)
+            ctx.translate(0, -Math.max(0, jumpHeight))
+            break
+            
+          case 'spin':
+            const rotation = (360 * motion.intensity * easeOut) * (Math.PI / 180)
+            ctx.rotate(rotation)
+            break
+            
+          case 'bounce':
+            const bounceY = Math.abs(bounce) * 8 * motion.intensity
+            const bounceX = bounce * 3 * motion.intensity
+            ctx.translate(bounceX, -bounceY)
+            break
+        }
+      } else {
+        // 모션 완료 시 idle로 복귀
+        state.kiroMotion.type = 'idle'
+      }
+    }
+    
     // 키로 이미지가 로드되었으면 이미지 사용
     if (state.imageLoaded && state.kiroImage) {
       ctx.drawImage(
         state.kiroImage, 
-        kiroX - size/2, 
-        kiroY - size/2, 
+        -size/2, 
+        -size/2, 
         size, 
         size
       )
@@ -1789,14 +1983,16 @@ export default function BubbleShooter() {
       // 이미지 로딩 실패 시 간단한 플레이스홀더
       ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
       ctx.beginPath()
-      ctx.arc(kiroX, kiroY, size/2, 0, Math.PI * 2)
+      ctx.arc(0, 0, size/2, 0, Math.PI * 2)
       ctx.fill()
       
       ctx.fillStyle = '#000'
       ctx.font = '12px Arial'
       ctx.textAlign = 'center'
-      ctx.fillText('KIRO', kiroX, kiroY + 4)
+      ctx.fillText('KIRO', 0, 4)
     }
+    
+    ctx.restore()
   }
 
 
@@ -1840,12 +2036,14 @@ export default function BubbleShooter() {
           key={i} 
           style={{ 
             fontSize: '48px', 
-            color: filled ? '#FFD700' : '#666',
-            textShadow: filled ? '0 0 10px #FFD700' : 'none',
-            margin: '0 8px'
+            color: filled ? '#FFD700' : 'rgba(255, 255, 255, 0.3)',
+            textShadow: filled ? '0 0 15px #FFD700, 0 0 30px #FFD700' : '0 0 10px rgba(255, 255, 255, 0.5)',
+            margin: '0 8px',
+            filter: filled ? 'drop-shadow(0 4px 8px rgba(255, 215, 0, 0.4))' : 'none',
+            transition: 'all 0.3s ease'
           }}
         >
-          {filled ? '★' : '☆'}
+          ★
         </span>
       )
     }
@@ -1856,27 +2054,236 @@ export default function BubbleShooter() {
     <div style={{ 
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       minHeight: '100vh',
-      width: '100vw', // 뷰포트 전체 너비
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: '0',
-      margin: '0',
-      position: 'relative',
-      boxSizing: 'border-box',
-      overflow: 'hidden' // 스크롤바 방지
+      padding: '10px',
+      position: 'relative'
     }}>
+      {/* 시작 화면 */}
+      {gameState === 'start' && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          background: '#000'
+        }}>
+          {/* 이미지를 img 태그로 직접 표시 */}
+          <img 
+            src={startBgImage}
+            alt="Start Background"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              zIndex: -1
+            }}
+            onError={(e) => {
+              console.log('이미지 로드 실패:', e);
+              e.currentTarget.style.display = 'none';
+            }}
+            onLoad={() => {
+              console.log('이미지 로드 성공');
+            }}
+          />
+          
+          {/* 시작 화면 버튼들 */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            alignItems: 'center',
+            zIndex: 2,
+            marginTop: '200px' // 화면 하단에 배치
+          }}>
+            <button
+              onClick={startNewGame}
+              style={{
+                background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7))',
+                color: '#4a5568',
+                border: '2px solid rgba(255, 255, 255, 0.8)',
+                padding: '20px 60px',
+                fontSize: '24px',
+                fontWeight: '700',
+                fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
+                borderRadius: '50px',
+                cursor: 'pointer',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+                transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                letterSpacing: '1px',
+                backdropFilter: 'blur(10px)',
+                minWidth: '200px'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)'
+                e.currentTarget.style.boxShadow = '0 15px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.9)'
+                e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.8))'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0px) scale(1)'
+                e.currentTarget.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.8)'
+                e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7))'
+              }}
+            >
+              🎮 PLAY
+            </button>
+            
+            <button
+              onClick={showTutorial}
+              style={{
+                background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.5))',
+                color: '#4a5568',
+                border: '2px solid rgba(255, 255, 255, 0.6)',
+                padding: '16px 50px',
+                fontSize: '18px',
+                fontWeight: '600',
+                fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
+                borderRadius: '50px',
+                cursor: 'pointer',
+                boxShadow: '0 8px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+                transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                letterSpacing: '0.5px',
+                backdropFilter: 'blur(10px)',
+                minWidth: '200px'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'
+                e.currentTarget.style.boxShadow = '0 12px 35px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.7)'
+                e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.6))'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0px) scale(1)'
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
+                e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.5))'
+              }}
+            >
+              📖 HOW TO PLAY
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 튜토리얼 화면 */}
+      {gameState === 'tutorial' && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.9)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9))',
+            padding: '40px',
+            borderRadius: '25px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(20px)',
+            border: '2px solid rgba(255, 255, 255, 0.8)'
+          }}>
+            <h2 style={{
+              color: '#4a5568',
+              fontSize: '28px',
+              fontWeight: '700',
+              marginBottom: '30px',
+              textAlign: 'center',
+              fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
+            }}>
+              🎯 게임 방법
+            </h2>
+            
+            <div style={{
+              color: '#2d3748',
+              fontSize: '16px',
+              lineHeight: '1.8',
+              marginBottom: '30px',
+              fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
+            }}>
+              <div style={{ marginBottom: '15px' }}>
+                <strong>🎮 조작법:</strong><br />
+                • 마우스로 조준하고 클릭해서 버블을 발사하세요
+              </div>
+              
+              <div style={{ marginBottom: '15px' }}>
+                <strong>🎯 목표:</strong><br />
+                • 같은 색깔 버블 3개 이상을 맞춰서 터뜨리세요<br />
+                • 모든 컬러 버블을 제거하면 클리어!
+              </div>
+              
+              <div style={{ marginBottom: '15px' }}>
+                <strong>⚠️ 주의사항:</strong><br />
+                • 30초마다 벽이 내려옵니다<br />
+                • 버블이 노란 구슬라인을 넘으면 게임오버!
+              </div>
+              
+              <div>
+                <strong>⭐ 별점 시스템:</strong><br />
+                • 클리어 시: ⭐⭐⭐ (3개)<br />
+                • 2/3 이상 제거: ⭐⭐ (2개)<br />
+                • 1/3 이상 제거: ⭐ (1개)
+              </div>
+            </div>
+            
+            <div style={{ textAlign: 'center' }}>
+              <button
+                onClick={backToStart}
+                style={{
+                  background: 'linear-gradient(145deg, #667eea, #764ba2)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '15px 40px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  borderRadius: '50px',
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 25px rgba(102, 126, 234, 0.4)',
+                  transition: 'all 0.3s ease',
+                  fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)'
+                  e.currentTarget.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.6)'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0px) scale(1)'
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)'
+                }}
+              >
+                ← 돌아가기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 게임 화면 (기존 코드) */}
+      {gameState === 'playing' && (
       <div style={{
         textAlign: 'center',
         background: 'rgba(255, 255, 255, 0.1)',
-        padding: '10px', // 패딩 줄임
+        padding: '15px',
         borderRadius: '15px',
         backdropFilter: 'blur(10px)',
-        position: 'relative',
-        width: '100vw', // 뷰포트 전체 너비
-        maxWidth: '100vw', // 최대 너비도 뷰포트 전체
-        margin: '0', // 마진 제거
-        boxSizing: 'border-box' // 패딩 포함한 크기 계산
+        position: 'relative'
       }}>
         <SpaceBetween size="s">
           <div style={{ color: 'white', fontSize: '20px' }}>
@@ -1899,7 +2306,11 @@ export default function BubbleShooter() {
           )}
           
           {/* 게임 캔버스 컨테이너 */}
-          <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+          <div style={{ 
+            position: 'relative', 
+            display: 'inline-block',
+            visibility: gameState === 'playing' ? 'visible' : 'hidden'
+          }}>
             <canvas
               ref={canvasRef}
               width={500}
@@ -1907,11 +2318,8 @@ export default function BubbleShooter() {
               style={{
                 border: '3px solid #fff',
                 borderRadius: '10px',
-                background: '#000',
-                cursor: !gameRunning ? 'not-allowed' : 'crosshair',
-                width: '100%', // 반응형으로 변경
-                height: 'auto', // 비율 유지
-                maxWidth: '500px' // 최대 크기 제한
+                background: 'transparent',
+                cursor: !gameRunning ? 'not-allowed' : 'crosshair'
               }}
             />
           </div>
@@ -1926,6 +2334,7 @@ export default function BubbleShooter() {
           </Box>
         </SpaceBetween>
       </div>
+      )}
 
       {/* 엔딩 화면 오버레이 */}
       {gameResult && (
@@ -2037,30 +2446,29 @@ export default function BubbleShooter() {
                 </>
               )}
 
-              {/* 타이틀 - 더 귀엽게 */}
+              {/* 타이틀 - 더 깔끔하게 */}
               <div style={{
-                fontSize: '32px',
-                fontWeight: 'bold',
+                fontSize: '28px',
+                fontWeight: '700',
                 color: '#fff',
                 marginBottom: '20px',
-                textShadow: '3px 3px 6px rgba(0, 0, 0, 0.6)',
-                WebkitTextStroke: '1px #ff69b4',
+                textShadow: '2px 2px 8px rgba(0, 0, 0, 0.5)',
                 zIndex: 3,
                 background: gameResult.starCount === 3 
-                  ? 'linear-gradient(45deg, rgba(255, 182, 193, 0.9), rgba(255, 192, 203, 0.9))'
-                  : 'linear-gradient(45deg, rgba(147, 112, 219, 0.9), rgba(138, 43, 226, 0.9))',
+                  ? 'linear-gradient(135deg, rgba(255, 182, 193, 0.9), rgba(255, 192, 203, 0.9))'
+                  : 'linear-gradient(135deg, rgba(100, 100, 100, 0.9), rgba(80, 80, 80, 0.9))',
                 padding: '15px 25px',
-                borderRadius: '25px',
+                borderRadius: '20px',
                 border: gameResult.starCount === 3 
-                  ? '3px solid #ff69b4' 
-                  : '3px solid #9370db',
+                  ? '2px solid rgba(255, 105, 180, 0.6)' 
+                  : '2px solid rgba(120, 120, 120, 0.6)',
                 boxShadow: '0 8px 20px rgba(0, 0, 0, 0.3)',
-                animation: gameResult.starCount === 3 ? 'bounce 1s ease-in-out infinite' : 'pulse 2s ease-in-out infinite'
+                fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
               }}>
-                {gameResult.starCount === 3 ? '🎀 PERFECT CLEAR! 🎀' : '😢 TRY AGAIN! 😢'}
+                {gameResult.starCount === 3 ? '🎀 PERFECT CLEAR! 🎀' : '😔 GAME OVER'}
               </div>
 
-              {/* 키로 캐릭터 이미지 - 더 귀엽게 */}
+              {/* 키로 캐릭터 이미지 - 정적으로 */}
               {gameStateRef.current.endingImagesLoaded ? (
                 <div style={{
                   width: '320px',
@@ -2074,9 +2482,8 @@ export default function BubbleShooter() {
                   marginBottom: '-20px',
                   filter: gameResult.starCount === 3 
                     ? 'drop-shadow(0 0 30px rgba(255, 182, 193, 0.8)) brightness(1.1)'
-                    : 'drop-shadow(0 0 30px rgba(147, 112, 219, 0.8))',
-                  zIndex: 0,
-                  animation: gameResult.starCount === 3 ? 'wiggle 2s ease-in-out infinite' : 'sway 3s ease-in-out infinite'
+                    : 'drop-shadow(0 0 20px rgba(100, 100, 100, 0.6))',
+                  zIndex: 0
                 }} />
               ) : (
                 <div style={{
@@ -2084,7 +2491,7 @@ export default function BubbleShooter() {
                   height: '320px',
                   background: gameResult.starCount === 3 
                     ? 'linear-gradient(45deg, #ffb6c1, #ffc0cb)'
-                    : 'linear-gradient(45deg, #dda0dd, #9370db)',
+                    : 'linear-gradient(45deg, #a0a0a0, #808080)',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
@@ -2094,116 +2501,157 @@ export default function BubbleShooter() {
                   fontWeight: 'bold',
                   color: '#fff',
                   zIndex: 0,
-                  boxShadow: '0 0 30px rgba(255, 182, 193, 0.8)',
-                  animation: gameResult.starCount === 3 ? 'wiggle 2s ease-in-out infinite' : 'sway 3s ease-in-out infinite'
+                  boxShadow: gameResult.starCount === 3 
+                    ? '0 0 30px rgba(255, 182, 193, 0.8)'
+                    : '0 0 20px rgba(100, 100, 100, 0.6)'
                 }}>
                   {gameResult.starCount === 3 ? '🥰' : '😊'} KIRO
                 </div>
               )}
 
-              {/* 별 표시 - 더 반짝이게 */}
+              {/* 별 표시 - 정적으로 */}
               <div style={{ 
                 marginBottom: '10px',
                 zIndex: 4,
-                position: 'relative',
-                animation: 'twinkle 1.5s ease-in-out infinite'
+                position: 'relative'
               }}>
                 {renderStars(gameResult.starCount)}
               </div>
 
-              {/* 하단 정보 영역 - 파스텔 톤으로 */}
+              {/* 하단 정보 영역 - 더 깔끔하게 */}
               <div style={{
                 position: 'relative',
                 zIndex: 1,
                 background: gameResult.starCount === 3 
-                  ? 'linear-gradient(135deg, rgba(255, 182, 193, 0.8), rgba(255, 192, 203, 0.8))'
-                  : 'linear-gradient(135deg, rgba(147, 112, 219, 0.8), rgba(138, 43, 226, 0.8))',
-                padding: '25px',
-                borderRadius: '20px',
-                border: gameResult.starCount === 3 
-                  ? '3px solid #ff69b4' 
-                  : '3px solid #9370db',
-                backdropFilter: 'blur(15px)',
-                maxWidth: '320px',
+                  ? 'linear-gradient(145deg, rgba(255, 182, 193, 0.95), rgba(255, 192, 203, 0.95))'
+                  : 'linear-gradient(145deg, rgba(120, 120, 120, 0.95), rgba(100, 100, 100, 0.95))',
+                padding: '30px',
+                borderRadius: '25px',
+                border: 'none',
+                backdropFilter: 'blur(20px)',
+                maxWidth: '350px',
                 width: '85%',
                 marginTop: '-30px',
-                boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
+                boxShadow: gameResult.starCount === 3 
+                  ? '0 20px 40px rgba(255, 182, 193, 0.4), 0 10px 20px rgba(255, 182, 193, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+                  : '0 20px 40px rgba(100, 100, 100, 0.4), 0 10px 20px rgba(100, 100, 100, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
+                overflow: 'hidden'
               }}>
-                {/* 점수 정보 - 더 귀엽게 */}
+                {/* 글래스모피즘 효과를 위한 배경 */}
                 <div style={{
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  padding: '20px',
-                  borderRadius: '15px',
-                  marginBottom: '20px',
-                  border: '2px solid rgba(255, 255, 255, 0.5)',
-                  marginTop: '20px',
-                  boxShadow: 'inset 0 2px 10px rgba(0, 0, 0, 0.1)'
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: gameResult.starCount === 3 
+                    ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 100%)'
+                    : 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 100%)',
+                  borderRadius: '25px',
+                  zIndex: -1
+                }} />
+
+                {/* 점수 정보 - 더 세련되게 */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  padding: '25px',
+                  borderRadius: '20px',
+                  marginBottom: '30px',
+                  border: 'none',
+                  marginTop: '25px',
+                  boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
+                  {/* 점수 박스 내부 글로우 효과 */}
                   <div style={{
-                    color: gameResult.starCount === 3 ? '#ff1493' : '#8a2be2',
-                    fontSize: '22px',
-                    fontWeight: 'bold',
-                    marginBottom: '10px',
-                    textShadow: '1px 1px 2px rgba(0, 0, 0, 0.3)'
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: '2px',
+                    background: gameResult.starCount === 3 
+                      ? 'linear-gradient(90deg, transparent, #ff69b4, transparent)'
+                      : 'linear-gradient(90deg, transparent, #888888, transparent)',
+                    opacity: 0.6
+                  }} />
+                  
+                  <div style={{
+                    color: gameResult.starCount === 3 ? '#e91e63' : '#555555',
+                    fontSize: '24px',
+                    fontWeight: '700',
+                    marginBottom: '12px',
+                    textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                    fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
                   }}>
                     🏆 SCORE: {gameResult.finalScore.toLocaleString()}
                   </div>
                   <div style={{
-                    color: gameResult.starCount === 3 ? '#ff69b4' : '#9370db',
+                    color: gameResult.starCount === 3 ? '#ad1457' : '#666666',
                     fontSize: '16px',
                     fontWeight: '600',
-                    marginBottom: '5px'
+                    marginBottom: '8px',
+                    fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
                   }}>
                     🫧 BUBBLES: {gameResult.clearedBubbles} / {gameResult.totalBubbles}
                   </div>
                   <div style={{
-                    color: gameResult.starCount === 3 ? '#ff1493' : '#8a2be2',
+                    color: gameResult.starCount === 3 ? '#c2185b' : '#777777',
                     fontSize: '14px',
-                    fontWeight: '500'
+                    fontWeight: '500',
+                    fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif'
                   }}>
                     📊 {((gameResult.clearedBubbles / gameResult.totalBubbles) * 100).toFixed(1)}% Complete!
                   </div>
                 </div>
 
-                {/* 버튼들 - 더 세련되게 */}
-                <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                {/* 버튼들 - 세로 배치로 깔끔하게 */}
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  gap: '12px', 
+                  alignItems: 'center'
+                }}>
                   <button
                     onClick={restartGame}
                     style={{
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.1))',
                       color: '#ffffff',
-                      border: 'none',
-                      padding: '16px 32px',
-                      fontSize: '16px',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      padding: '14px 0',
+                      fontSize: '15px',
                       fontWeight: '600',
                       fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
                       borderRadius: '50px',
                       cursor: 'pointer',
-                      boxShadow: '0 8px 25px rgba(102, 126, 234, 0.4)',
-                      transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                      textShadow: 'none',
+                      boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
+                      transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                      textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
                       letterSpacing: '0.5px',
+                      backdropFilter: 'blur(10px)',
                       position: 'relative',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      width: '200px', // 고정 너비
+                      textAlign: 'center'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)'
-                      e.currentTarget.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.6)'
-                      e.currentTarget.style.background = 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)'
+                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
+                      e.currentTarget.style.boxShadow = '0 12px 35px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.5)'
+                      e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.15))'
                     }}
                     onMouseOut={(e) => {
                       e.currentTarget.style.transform = 'translateY(0px) scale(1)'
-                      e.currentTarget.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)'
-                      e.currentTarget.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                      e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.4)'
+                      e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.1))'
                     }}
                   >
                     <span style={{ 
                       display: 'flex', 
                       alignItems: 'center', 
-                      gap: '8px',
-                      fontSize: '14px'
+                      justifyContent: 'center',
+                      gap: '8px'
                     }}>
-                      <span style={{ fontSize: '18px' }}>↻</span>
+                      <span style={{ fontSize: '16px' }}>↻</span>
                       다시 도전
                     </span>
                   </button>
@@ -2211,40 +2659,43 @@ export default function BubbleShooter() {
                   <button
                     onClick={() => window.location.reload()}
                     style={{
-                      background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
-                      color: '#8b4513',
-                      border: 'none',
-                      padding: '16px 32px',
-                      fontSize: '16px',
+                      background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.1))',
+                      color: '#ffffff',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      padding: '14px 0',
+                      fontSize: '15px',
                       fontWeight: '600',
                       fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
                       borderRadius: '50px',
                       cursor: 'pointer',
-                      boxShadow: '0 8px 25px rgba(252, 182, 159, 0.4)',
-                      transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                      textShadow: 'none',
+                      boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
+                      transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                      textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
                       letterSpacing: '0.5px',
+                      backdropFilter: 'blur(10px)',
                       position: 'relative',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      width: '200px', // 고정 너비
+                      textAlign: 'center'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)'
-                      e.currentTarget.style.boxShadow = '0 12px 35px rgba(252, 182, 159, 0.6)'
-                      e.currentTarget.style.background = 'linear-gradient(135deg, #fcb69f 0%, #ffecd2 100%)'
+                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
+                      e.currentTarget.style.boxShadow = '0 12px 35px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.5)'
+                      e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.15))'
                     }}
                     onMouseOut={(e) => {
                       e.currentTarget.style.transform = 'translateY(0px) scale(1)'
-                      e.currentTarget.style.boxShadow = '0 8px 25px rgba(252, 182, 159, 0.4)'
-                      e.currentTarget.style.background = 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)'
+                      e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.4)'
+                      e.currentTarget.style.background = 'linear-gradient(145deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.1))'
                     }}
                   >
                     <span style={{ 
                       display: 'flex', 
                       alignItems: 'center', 
-                      gap: '8px',
-                      fontSize: '14px'
+                      justifyContent: 'center',
+                      gap: '8px'
                     }}>
-                      <span style={{ fontSize: '18px' }}>⌂</span>
+                      <span style={{ fontSize: '16px' }}>⌂</span>
                       메인으로
                     </span>
                   </button>
