@@ -57,19 +57,19 @@ body {
 
 /* Background Images for Each Screen */
 .game-container.main-menu {
-  background-image: url('/src/games/emotion-match/main_page_no.png');
+  background-image: url('/games/emotion-match/main_page_no.png');
 }
 
 .game-container.difficulty-select {
-  background-image: url('/src/games/emotion-match/background_morning.png');
+  background-image: url('/games/emotion-match/background_morning.png');
 }
 
 .game-container.character-select {
-  background-image: url('/src/games/emotion-match/background_evening.png');
+  background-image: url('/games/emotion-match/background_evening.png');
 }
 
 .game-container.game-play {
-  background-image: url('/src/games/emotion-match/background_night.png');
+  background-image: url('/games/emotion-match/background_night.png');
 }
 
 /* Main Menu Styled Buttons - Bottom Center Layout */

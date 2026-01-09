@@ -6,8 +6,8 @@ const game: GameMeta = {
   mode: '3-Match Puzzle',
   status: 'open',
   description: 'Match emotion blocks to reach high altitudes within the time limit. Choose your characters and aim for the sky!',
-  thumbnail: '/src/games/emotion-match/thumdnail_image.png',
-  heroImage: '/src/games/emotion-match/hero_image.png',
+  thumbnail: '/games/emotion-match/thumdnail_image.png',
+  heroImage: '/games/emotion-match/hero_image.png',
 }
 
 export default game

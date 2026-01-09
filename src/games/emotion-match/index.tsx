@@ -54,15 +54,9 @@ const ALL_CHARACTERS = [
   'yellow_frightened'
 ]
 
-// 이미지 경로 함수 (프로덕션 환경 대응)
+// 이미지 경로 함수 (public 폴더 기준 - 가장 안전한 방법)
 const getCharacterImage = (character: string) => {
-  try {
-    // 동적 import 시도
-    return new URL(`./re_${character}.png`, import.meta.url).href
-  } catch {
-    // 폴백: 절대 경로
-    return `/src/games/emotion-match/re_${character}.png`
-  }
+  return `/games/emotion-match/re_${character}.png`
 }
 
 // Game reducer
