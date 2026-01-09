@@ -147,8 +147,6 @@ const copy = {
   },
 } as const
 
-type Copy = (typeof copy)['en']
-
 const placeholderImage =
   'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0%" stop-color="%23dbeafe"/><stop offset="100%" stop-color="%2393c5fd"/></linearGradient></defs><rect width="320" height="320" rx="28" fill="url(%23g)"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Open Sans, Arial, sans-serif" font-size="48" fill="%231e293b">1k2p</text></svg>'
 
@@ -196,12 +194,12 @@ function App() {
               onItemClick: ({ detail }) => setLocale(detail.id as Locale),
             },
             {
-              type: 'link',
+              type: 'button',
               text: t.navSubmit,
               href: '/#creators',
             },
             {
-              type: 'link',
+              type: 'button',
               text: t.navGuide,
               href: '/#creators',
             },
@@ -244,7 +242,7 @@ type PageProps = {
   navigationOpen: boolean
   onNavigationChange: (open: boolean) => void
   locale: Locale
-  t: Copy
+  t: typeof copy.en | typeof copy.ko
 }
 
 function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: PageProps) {
@@ -439,11 +437,11 @@ function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: 
             <Container id="roadmap" header={<Header variant="h2">{t.roadmapTitle}</Header>}>
               <SpaceBetween size="s">
                 <Box variant="h3">{t.roadmapSubtitle}</Box>
-                <Box component="ul" padding={{ left: 'l' }}>
+                <ul style={{ paddingLeft: '24px', margin: 0 }}>
                   {t.roadmapItems.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
-                </Box>
+                </ul>
               </SpaceBetween>
             </Container>
           </SpaceBetween>
