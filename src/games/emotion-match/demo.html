@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Match - Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .demo-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            color: white;
+        }
+        
+        .demo-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 30px 0;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .demo-block {
+            aspect-ratio: 1;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        
+        .demo-block:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .demo-block.matched {
+            background: rgba(255, 107, 107, 0.5);
+            border-color: #ff6b6b;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .feature {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .feature h3 {
+            margin-top: 0;
+            color: #fdcb6e;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-top: 30px;
+        }
+        
+        .demo-button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .demo-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1 class="demo-title">🎮 Emotion Match</h1>
+        
+        <p style="text-align: center; font-size: 1.2rem; margin-bottom: 30px;">
+            A 3-match puzzle game where you match emotion blocks to reach high altitudes!
+        </p>
+        
+        <div class="demo-grid" id="demoGrid">
+            <!-- Demo blocks will be generated here -->
+        </div>
+        
+        <div class="controls">
+            <button class="demo-button" onclick="generateDemoBoard()">New Demo Board</button>
+            <button class="demo-button" onclick="highlightMatches()">Show Matches</button>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <h3>🎯 Game Modes</h3>
+                <p><strong>Normal:</strong> 10x10 grid with 6 characters</p>
+                <p><strong>Hard:</strong> 12x12 grid with 8 characters</p>
+            </div>
+            
+            <div class="feature">
+                <h3>⏱️ Time Challenge</h3>
+                <p>60-second countdown with bonus time for matches</p>
+                <p>+2 seconds per successful match combo</p>
+            </div>
+            
+            <div class="feature">
+                <h3>🎨 Character Selection</h3>
+                <p>Choose from 10 unique emotion characters</p>
+                <p>Each with distinct personality and design</p>
+            </div>
+            
+            <div class="feature">
+                <h3>💡 Hint System</h3>
+                <p>2 hints per game to reveal possible moves</p>
+                <p>Strategic use can save you from game over</p>
+            </div>
+            
+            <div class="feature">
+                <h3>🏔️ Scoring System</h3>
+                <p>3 blocks = 3km • 4 blocks = 5km</p>
+                <p>5 blocks = 7km • 6+ blocks = 10km</p>
+            </div>
+            
+            <div class="feature">
+                <h3>🔄 Smart Mechanics</h3>
+                <p>Gravity system with cascading combos</p>
+                <p>Auto-detection of impossible game states</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const emotions = ['😀', '😢', '😡', '😍', '😱', '🤢', '😴', '🤔'];
+        let demoBoard = [];
+        
+        function generateDemoBoard() {
+            const grid = document.getElementById('demoGrid');
+            grid.innerHTML = '';
+            demoBoard = [];
+            
+            for (let i = 0; i < 16; i++) {
+                const block = document.createElement('div');
+                block.className = 'demo-block';
+                const emotion = emotions[Math.floor(Math.random() * emotions.length)];
+                block.textContent = emotion;
+                block.onclick = () => selectBlock(i);
+                grid.appendChild(block);
+                demoBoard.push(emotion);
+            }
+        }
+        
+        function selectBlock(index) {
+            const blocks = document.querySelectorAll('.demo-block');
+            blocks[index].style.background = 'rgba(255, 255, 255, 0.4)';
+            setTimeout(() => {
+                blocks[index].style.background = 'rgba(255, 255, 255, 0.2)';
+            }, 300);
+        }
+        
+        function highlightMatches() {
+            const blocks = document.querySelectorAll('.demo-block');
+            
+            // Clear previous highlights
+            blocks.forEach(block => block.classList.remove('matched'));
+            
+            // Simple horizontal match detection for demo
+            for (let row = 0; row < 4; row++) {
+                for (let col = 0; col < 2; col++) {
+                    const idx1 = row * 4 + col;
+                    const idx2 = row * 4 + col + 1;
+                    const idx3 = row * 4 + col + 2;
+                    
+                    if (demoBoard[idx1] === demoBoard[idx2] && demoBoard[idx2] === demoBoard[idx3]) {
+                        blocks[idx1].classList.add('matched');
+                        blocks[idx2].classList.add('matched');
+                        blocks[idx3].classList.add('matched');
+                    }
+                }
+            }
+            
+            // Simple vertical match detection for demo
+            for (let col = 0; col < 4; col++) {
+                for (let row = 0; row < 2; row++) {
+                    const idx1 = row * 4 + col;
+                    const idx2 = (row + 1) * 4 + col;
+                    const idx3 = (row + 2) * 4 + col;
+                    
+                    if (demoBoard[idx1] === demoBoard[idx2] && demoBoard[idx2] === demoBoard[idx3]) {
+                        blocks[idx1].classList.add('matched');
+                        blocks[idx2].classList.add('matched');
+                        blocks[idx3].classList.add('matched');
+                    }
+                }
+            }
+        }
+        
+        // Initialize demo board
+        generateDemoBoard();
+    </script>
+</body>
+</html>
