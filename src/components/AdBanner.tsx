@@ -32,7 +32,7 @@ export function AdBanner({
       <ins
         className="adsbygoogle"
         style={{ display: 'block' }}
-        data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" // 여기에 본인의 AdSense 클라이언트 ID 입력
+        data-ad-client="ca-pub-6428367328524644"
         data-ad-slot={adSlot}
         data-ad-format={adFormat}
         data-full-width-responsive={fullWidthResponsive.toString()}
