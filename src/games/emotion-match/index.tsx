@@ -54,25 +54,25 @@ const ALL_CHARACTERS = [
   'yellow_frightened'
 ]
 
-// 이미지 경로 - public 폴더 기준
+// 이미지 경로 - public/assets 폴더 기준
 const CHARACTER_IMAGES: Record<string, string> = {
-  'black_frightened': '/games/emotion-match/re_black_frightened.png',
-  'blue_sad': '/games/emotion-match/re_blue_sad.png',
-  'green_disgust': '/games/emotion-match/re_green_disgust.png',
-  'grey_love': '/games/emotion-match/re_grey_love.png',
-  'orange_shy': '/games/emotion-match/re_orange_shy.png',
-  'pink_happy': '/games/emotion-match/re_pink_happy.png',
-  'purple_envy': '/games/emotion-match/re_purple_envy.png',
-  'red_angry': '/games/emotion-match/re_red_angry.png',
-  'white_smile': '/games/emotion-match/re_white_smile.png',
-  'yellow_frightened': '/games/emotion-match/re_yellow_frightened.png',
+  'black_frightened': '/assets/emotion-match/re_black_frightened.png',
+  'blue_sad': '/assets/emotion-match/re_blue_sad.png',
+  'green_disgust': '/assets/emotion-match/re_green_disgust.png',
+  'grey_love': '/assets/emotion-match/re_grey_love.png',
+  'orange_shy': '/assets/emotion-match/re_orange_shy.png',
+  'pink_happy': '/assets/emotion-match/re_pink_happy.png',
+  'purple_envy': '/assets/emotion-match/re_purple_envy.png',
+  'red_angry': '/assets/emotion-match/re_red_angry.png',
+  'white_smile': '/assets/emotion-match/re_white_smile.png',
+  'yellow_frightened': '/assets/emotion-match/re_yellow_frightened.png',
 }
 
 // 배경 이미지 경로
-const mainPageNo = '/games/emotion-match/main_page_no.png'
-const backgroundMorning = '/games/emotion-match/background_morning.png'
-const backgroundEvening = '/games/emotion-match/background_evening.png'
-const backgroundNight = '/games/emotion-match/background_night.png'
+const mainPageNo = '/assets/emotion-match/main_page_no.png'
+const backgroundMorning = '/assets/emotion-match/background_morning.png'
+const backgroundEvening = '/assets/emotion-match/background_evening.png'
+const backgroundNight = '/assets/emotion-match/background_night.png'
 
 // 이미지 경로 함수
 const getCharacterImage = (character: string) => {
