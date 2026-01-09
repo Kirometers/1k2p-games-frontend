@@ -27,18 +27,15 @@ jobs:
             exit 0
           fi
           
-          # Skip for infrastructure/UI development branches
+          # Apply scope check ONLY for game development branches (game/*)
           BRANCH_NAME="${{ github.head_ref }}"
-          if [[ "$BRANCH_NAME" =~ ^(feature/ui-|feature/infra-|feature/core-|chore/|docs/|ci/) ]]; then
+          if [[ "$BRANCH_NAME" =~ ^game/ ]]; then
+            echo "should_skip=false" >> $GITHUB_OUTPUT
+            echo "reason=Game development branch" >> $GITHUB_OUTPUT
+          else
             echo "should_skip=true" >> $GITHUB_OUTPUT
-            echo "reason=Infrastructure/UI branch ($BRANCH_NAME)" >> $GITHUB_OUTPUT
-            exit 0
+            echo "reason=Infrastructure/UI branch (not game/*)" >> $GITHUB_OUTPUT
           fi
-          
-          # Skip if PR has 'infrastructure' or 'skip-game-scope' label
-          # (This would require additional GitHub API call, keeping it simple for now)
-          
-          echo "should_skip=false" >> $GITHUB_OUTPUT
 
       - name: Verify game scope
         if: steps.check-skip.outputs.should_skip != 'true'
@@ -46,4 +43,4 @@ jobs:
 
       - name: Skip check
         if: steps.check-skip.outputs.should_skip == 'true'
-        run: echo "Skipping game scope check - ${{ steps.check-skip.outputs.reason }}"
+        run: echo "✓ Skipping game scope check - ${{ steps.check-skip.outputs.reason }}"

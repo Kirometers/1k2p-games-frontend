@@ -16,19 +16,16 @@ auto-load it.
 These rules keep the Cloudscape look intact and prevent cross-team conflicts.
 
 **Branch naming conventions:**
-- `feature/game-<game-id>-*` - Game development (scope check applies)
-- `feature/ui-*` - UI/layout changes (scope check skipped)
-- `feature/infra-*` - Infrastructure changes (scope check skipped)
-- `feature/core-*` - Core functionality (scope check skipped)
-- `chore/*` - Maintenance tasks (scope check skipped)
-- `docs/*` - Documentation only (scope check skipped)
-- `ci/*` - CI/CD changes (scope check skipped)
+- `game/*` - Game development (scope check **applies**)
+  - Example: `game/space-invaders`, `game/tetris-clone`
+- Anything else - Infrastructure/UI/Core development (scope check **skipped**)
+  - Example: `feature/new-ui`, `fix/routing-bug`, `chore/update-deps`
 
-1. Do not change global UI layout or styling
+1. Do not change global UI layout or styling (for game development)
    - Avoid edits to `src/App.tsx`, `src/main.tsx`, and `src/index.css`.
    - Do not add global CSS resets or site-wide styles.
    - Use Cloudscape components and design tokens instead of custom CSS themes.
-   - **Exception:** Use `feature/ui-*` branch for intentional UI changes.
+   - **Exception:** Non-game branches can freely modify these files.
 
 2. Only touch your game folder
    - Put your work under `src/games/<game-id>/`.
@@ -72,6 +69,7 @@ Paste this when asking an AI to work on a mini game:
 
 ```
 Follow `CONTRIBUTING.md` and `src/games/README.md`.
+Use branch name starting with 'game/' for game development.
 Work only inside `src/games/<game-id>/` and `public/games/<game-id>/`.
 Shared utilities can go in `src/games/shared/` if needed by multiple games.
 Add `game.ts` metadata for the hub auto-listing.
@@ -212,14 +210,15 @@ in the CI job or run the check locally with that env var.
 
 If you're working on the hub UI, core infrastructure, or CI/CD:
 
-1. **Use appropriate branch naming:**
-   - `feature/ui-*` for UI changes
-   - `feature/infra-*` for infrastructure
-   - `feature/core-*` for core functionality
+1. **Use any branch name EXCEPT `game/*`:**
+   - `feature/*` for new features
+   - `fix/*` for bug fixes
    - `chore/*` for maintenance
-   - `ci/*` for CI/CD changes
+   - `docs/*` for documentation
+   - `refactor/*` for refactoring
+   - etc.
 
-2. **Game scope check will be automatically skipped** for these branches.
+2. **Game scope check will be automatically skipped** for non-game branches.
 
 3. **Still follow best practices:**
    - Keep PRs focused and reviewable
