@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Box, SpaceBetween } from '@cloudscape-design/components'
 import kiroImage from './krio.png'
+import gameclearKiroImage from './gameclear_kiro.png'
+import gameclearBgImage from './gameclear.png'
+import gameoverKiroImage from './gameover_kiro.png'
+import gameoverBgImage from './gameover.png'
 
 // 게임 상수
 const WALL_DESCENT_INTERVAL_MS = 30000  // 30초
@@ -80,6 +84,54 @@ export default function BubbleShooter() {
     clearedBubbles: number
     finalScore: number
   } | null>(null)
+
+  // CSS 애니메이션 스타일 추가
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.textContent = `
+      @keyframes sparkle {
+        0%, 100% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+      }
+      
+      @keyframes float {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-20px) rotate(10deg); }
+      }
+      
+      @keyframes bounce {
+        0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+        40% { transform: translateY(-10px); }
+        60% { transform: translateY(-5px); }
+      }
+      
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+      
+      @keyframes wiggle {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(2deg); }
+        75% { transform: rotate(-2deg); }
+      }
+      
+      @keyframes sway {
+        0%, 100% { transform: translateX(0px); }
+        50% { transform: translateX(5px); }
+      }
+      
+      @keyframes twinkle {
+        0%, 100% { transform: scale(1) rotate(0deg); }
+        50% { transform: scale(1.1) rotate(5deg); }
+      }
+    `
+    document.head.appendChild(style)
+    
+    return () => {
+      document.head.removeChild(style)
+    }
+  }, [])
   
   // 게임 상태
   const gameStateRef = useRef({
@@ -98,6 +150,12 @@ export default function BubbleShooter() {
     bubbleIdCounter: 0,  // 개발 모드용 ID 생성 카운터
     kiroImage: null as HTMLImageElement | null,
     imageLoaded: false,
+    // 엔딩 화면 이미지들
+    gameclearKiroImage: null as HTMLImageElement | null,
+    gameclearBgImage: null as HTMLImageElement | null,
+    gameoverKiroImage: null as HTMLImageElement | null,
+    gameoverBgImage: null as HTMLImageElement | null,
+    endingImagesLoaded: false,
     // 애니메이션 상태
     popParticles: [] as PopParticle[],
     fallingBubbles: [] as FallingBubble[],
@@ -370,10 +428,63 @@ export default function BubbleShooter() {
       state.imageLoaded = false
     }
     
+    // 엔딩 화면 이미지들 로드
+    loadEndingImages()
+    
     // 초기 버블 배치
     createInitialBubbles()
     createNewBubble()
     createNextBubble()
+  }
+
+  const loadEndingImages = () => {
+    const state = gameStateRef.current
+    let loadedCount = 0
+    const totalImages = 4
+    
+    const checkAllLoaded = () => {
+      loadedCount++
+      if (loadedCount === totalImages) {
+        state.endingImagesLoaded = true
+        console.log('[DEV] 모든 엔딩 이미지 로드 완료')
+      }
+    }
+    
+    // 게임 클리어 키로 이미지
+    state.gameclearKiroImage = new Image()
+    state.gameclearKiroImage.src = gameclearKiroImage
+    state.gameclearKiroImage.onload = checkAllLoaded
+    state.gameclearKiroImage.onerror = () => {
+      console.warn('[DEV] gameclear_kiro 이미지 로드 실패')
+      checkAllLoaded()
+    }
+    
+    // 게임 클리어 배경 이미지
+    state.gameclearBgImage = new Image()
+    state.gameclearBgImage.src = gameclearBgImage
+    state.gameclearBgImage.onload = checkAllLoaded
+    state.gameclearBgImage.onerror = () => {
+      console.warn('[DEV] gameclear 배경 이미지 로드 실패')
+      checkAllLoaded()
+    }
+    
+    // 게임 오버 키로 이미지
+    state.gameoverKiroImage = new Image()
+    state.gameoverKiroImage.src = gameoverKiroImage
+    state.gameoverKiroImage.onload = checkAllLoaded
+    state.gameoverKiroImage.onerror = () => {
+      console.warn('[DEV] gameover_kiro 이미지 로드 실패')
+      checkAllLoaded()
+    }
+    
+    // 게임 오버 배경 이미지
+    state.gameoverBgImage = new Image()
+    state.gameoverBgImage.src = gameoverBgImage
+    state.gameoverBgImage.onload = checkAllLoaded
+    state.gameoverBgImage.onerror = () => {
+      console.warn('[DEV] gameover 배경 이미지 로드 실패')
+      checkAllLoaded()
+    }
   }
 
   const createInitialBubbles = () => {
@@ -445,10 +556,19 @@ export default function BubbleShooter() {
 
   const createNewBubble = () => {
     const state = gameStateRef.current
+    
+    // 다음 버블 색상 결정
+    let nextColor: string
+    if (state.nextBubble) {
+      nextColor = state.nextBubble.color
+    } else {
+      nextColor = getRandomBubbleColor()
+    }
+    
     state.currentBubble = {
       x: state.shooter.x,
       y: state.shooter.y,
-      color: state.nextBubble ? state.nextBubble.color : state.colors[Math.floor(Math.random() * state.colors.length)],
+      color: nextColor,
       dx: 0,
       dy: 0,
       moving: false,
@@ -462,8 +582,36 @@ export default function BubbleShooter() {
   const createNextBubble = () => {
     const state = gameStateRef.current
     state.nextBubble = {
-      color: state.colors[Math.floor(Math.random() * state.colors.length)]
+      color: getRandomBubbleColor()
     }
+  }
+
+  const getRandomBubbleColor = (): string => {
+    const state = gameStateRef.current
+    
+    // 현재 보드에 있는 일반 버블들 (벽 블록 제외)
+    const normalBubbles = state.bubbles.filter(bubble => !bubble.isWall)
+    
+    console.log(`[DEV] 🎨 색상 선택: 현재 일반 버블 수 = ${normalBubbles.length}개`)
+    
+    // 10개 이하로 남으면 남은 구슬 색상에서만 선택
+    if (normalBubbles.length <= 10 && normalBubbles.length > 0) {
+      // 현재 보드에 있는 색상들만 추출
+      const existingColors = [...new Set(normalBubbles.map(bubble => bubble.color))]
+      
+      console.log(`[DEV] 🎨 10개 이하 모드: 남은 색상 = [${existingColors.join(', ')}]`)
+      
+      if (existingColors.length > 0) {
+        const selectedColor = existingColors[Math.floor(Math.random() * existingColors.length)]
+        console.log(`[DEV] 🎨 선택된 색상: ${selectedColor}`)
+        return selectedColor
+      }
+    }
+    
+    // 일반 모드: 전체 색상에서 랜덤 선택
+    const selectedColor = state.colors[Math.floor(Math.random() * state.colors.length)]
+    console.log(`[DEV] 🎨 일반 모드 선택된 색상: ${selectedColor}`)
+    return selectedColor
   }
 
   const calculateTrajectory = (mouseX: number, mouseY: number) => {
@@ -951,6 +1099,10 @@ export default function BubbleShooter() {
         console.log(`[DEV] 💥   제거 대상: ID=${match.id}, 색상=${match.color}, 위치=(${match.gridRow}, ${match.gridCol})`)
       })
       
+      // 제거된 버블 수 누적 (벽 블록 제외)
+      const removedNormalBubbles = matches.filter(match => !match.isWall).length
+      state.clearedBubbles += removedNormalBubbles
+      
       for (let match of matches) {
         const index = state.bubbles.indexOf(match)
         if (index > -1) {
@@ -962,6 +1114,7 @@ export default function BubbleShooter() {
       setScore(newScore)
       
       console.log(`[DEV] 🎯 점수 업데이트: ${score} → ${newScore} (+${matches.length * 10})`)
+      console.log(`[DEV] 🎯 제거된 버블 누적: ${state.clearedBubbles}/${state.totalBubbles}`)
       
       // 매칭 후 버블 무결성 검증
       validateBubbleIntegrity(beforeSnapshot || [], state.bubbles, '버블 매칭 제거')
@@ -1067,6 +1220,10 @@ export default function BubbleShooter() {
     // 떨어지는 효과 생성
     if (toRemove.length > 0) {
       createFallingEffect(toRemove)
+      
+      // 제거된 버블 수 누적 (벽 블록 제외)
+      const removedNormalBubbles = toRemove.filter(bubble => !bubble.isWall).length
+      state.clearedBubbles += removedNormalBubbles
     }
     
     for (let bubble of toRemove) {
@@ -1082,6 +1239,7 @@ export default function BubbleShooter() {
       
       console.log(`[DEV] 🌊 떠있는 버블 제거 완료: ${toRemove.length}개 제거됨`)
       console.log(`[DEV] 🌊 보너스 점수: +${bonusScore}`)
+      console.log(`[DEV] 🌊 제거된 버블 누적: ${state.clearedBubbles}/${state.totalBubbles}`)
       
       // 떠있는 버블 제거 후 무결성 검증
       validateBubbleIntegrity(beforeSnapshot || [], state.bubbles, '떠있는 버블 제거')
@@ -1289,9 +1447,10 @@ export default function BubbleShooter() {
       }
     }
     
-    // 모든 버블 제거 시 승리
-    if (state.bubbles.length === 0) {
-      console.log(`[DEV] 🎯 승리 조건 달성: 모든 버블 제거됨`)
+    // 일반 버블(벽 블록 제외)이 모두 제거되면 승리
+    const normalBubbles = state.bubbles.filter(bubble => !bubble.isWall)
+    if (normalBubbles.length === 0) {
+      console.log(`[DEV] 🎯 승리 조건 달성: 모든 일반 버블 제거됨 (벽 블록 제외)`)
       triggerVictory()
     }
   }
@@ -1301,6 +1460,29 @@ export default function BubbleShooter() {
     
     setGameRunning(false)
     setGameOver(true)
+    
+    // 별 계산 (게임오버 시)
+    const clearRatio = state.totalBubbles > 0 ? state.clearedBubbles / state.totalBubbles : 0
+    let starCount = 0
+    
+    if (clearRatio >= 2/3) {
+      starCount = 2
+    } else if (clearRatio >= 1/3) {
+      starCount = 1
+    } else {
+      starCount = 0
+    }
+    
+    console.log(`[DEV] 🎮 게임오버 - 제거 비율: ${(clearRatio * 100).toFixed(1)}%, 별: ${starCount}개`)
+    
+    // 엔딩 결과 설정
+    setGameResult({
+      isClear: false,
+      starCount: starCount,
+      totalBubbles: state.totalBubbles,
+      clearedBubbles: state.clearedBubbles,
+      finalScore: score
+    })
     
     // 모든 타이머 정리
     if (state.wallTimer) {
@@ -1320,6 +1502,17 @@ export default function BubbleShooter() {
     
     setGameRunning(false)
     // 승리 시에는 gameOver를 false로 유지 (승리 상태 구분)
+    
+    console.log(`[DEV] 🎮 승리! - 모든 버블 제거됨, 별: 3개`)
+    
+    // 엔딩 결과 설정 (클리어 시 무조건 별 3개)
+    setGameResult({
+      isClear: true,
+      starCount: 3,
+      totalBubbles: state.totalBubbles,
+      clearedBubbles: state.clearedBubbles,
+      finalScore: score
+    })
     
     // 모든 타이머 정리
     if (state.wallTimer) {
@@ -1612,7 +1805,7 @@ export default function BubbleShooter() {
     // 픽셀 기준 구슬라인 (고정)
     const lineY = SHOOTER_LINE_Y
     
-    // 구슬라인이 화면에 보일 때만 그리기
+    // 구슬라인이 화면에 보일 때만 그리기 (텍스트 제거)
     if (lineY > 0 && lineY < canvas.height) {
       ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)'  // 더 진한 노란색
       ctx.lineWidth = 3
@@ -1624,85 +1817,66 @@ export default function BubbleShooter() {
       ctx.stroke()
       ctx.setLineDash([])
       
-      // 구슬라인 라벨
-      ctx.fillStyle = 'rgba(255, 255, 0, 0.8)'
-      ctx.font = '12px Arial'
-      ctx.textAlign = 'right'
-      ctx.fillText('구슬라인', canvas.width - 10, lineY - 5)
+      // 구슬라인 라벨 제거 (주석 처리)
+      // ctx.fillStyle = 'rgba(255, 255, 0, 0.8)'
+      // ctx.font = '12px Arial'
+      // ctx.textAlign = 'right'
+      // ctx.fillText('구슬라인', canvas.width - 10, lineY - 5)
     }
   }
 
   const showGameEnd = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-    const state = gameStateRef.current
-    
-    // 반투명 오버레이
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)'
+    // 캔버스에는 간단한 오버레이만 표시
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
-    
-    const isVictory = state.bubbles.length === 0 && !gameOver
-    const isGameOver = gameOver
-    
-    // 메인 텍스트
-    if (isVictory) {
-      ctx.fillStyle = '#4ecdc4'
-      ctx.font = 'bold 48px Arial'
-      ctx.textAlign = 'center'
-      ctx.fillText('🎉 승리! 🎉', canvas.width / 2, canvas.height / 2 - 80)
-      
-      ctx.fillStyle = '#fff'
-      ctx.font = '20px Arial'
-      ctx.fillText('모든 버블을 제거했습니다!', canvas.width / 2, canvas.height / 2 - 40)
-    } else if (isGameOver) {
-      ctx.fillStyle = '#ff4444'
-      ctx.font = 'bold 48px Arial'
-      ctx.textAlign = 'center'
-      ctx.fillText('💥 게임 오버! 💥', canvas.width / 2, canvas.height / 2 - 80)
-      
-      // 게임오버 원인 설명
-      ctx.fillStyle = '#fff'
-      ctx.font = '18px Arial'
-      ctx.fillText('버블이 구슬라인에 닿았습니다!', canvas.width / 2, canvas.height / 2 - 40)
+  }
+
+  const renderStars = (starCount: number) => {
+    const stars = []
+    for (let i = 0; i < 3; i++) {
+      const filled = i < starCount
+      stars.push(
+        <span 
+          key={i} 
+          style={{ 
+            fontSize: '48px', 
+            color: filled ? '#FFD700' : '#666',
+            textShadow: filled ? '0 0 10px #FFD700' : 'none',
+            margin: '0 8px'
+          }}
+        >
+          {filled ? '★' : '☆'}
+        </span>
+      )
     }
-    
-    // 점수 표시
-    ctx.fillStyle = '#fff'
-    ctx.font = 'bold 28px Arial'
-    ctx.fillText(`최종 점수: ${score}`, canvas.width / 2, canvas.height / 2 + 10)
-    
-    // 재시작 버튼 영역 표시
-    ctx.fillStyle = 'rgba(76, 175, 80, 0.9)'
-    ctx.fillRect(canvas.width / 2 - 80, canvas.height / 2 + 40, 160, 50)
-    
-    ctx.strokeStyle = '#4CAF50'
-    ctx.lineWidth = 2
-    ctx.strokeRect(canvas.width / 2 - 80, canvas.height / 2 + 40, 160, 50)
-    
-    ctx.fillStyle = '#fff'
-    ctx.font = 'bold 18px Arial'
-    ctx.fillText('🔄 다시 시작', canvas.width / 2, canvas.height / 2 + 70)
-    
-    // 새로고침 안내 (보조)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
-    ctx.font = '14px Arial'
-    ctx.fillText('또는 새로고침(F5)하세요', canvas.width / 2, canvas.height / 2 + 110)
+    return stars
   }
 
   return (
     <div style={{ 
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       minHeight: '100vh',
+      width: '100vw', // 뷰포트 전체 너비
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: '10px'
+      padding: '0',
+      margin: '0',
+      position: 'relative',
+      boxSizing: 'border-box',
+      overflow: 'hidden' // 스크롤바 방지
     }}>
       <div style={{
         textAlign: 'center',
         background: 'rgba(255, 255, 255, 0.1)',
-        padding: '15px',
+        padding: '10px', // 패딩 줄임
         borderRadius: '15px',
         backdropFilter: 'blur(10px)',
-        position: 'relative'
+        position: 'relative',
+        width: '100vw', // 뷰포트 전체 너비
+        maxWidth: '100vw', // 최대 너비도 뷰포트 전체
+        margin: '0', // 마진 제거
+        boxSizing: 'border-box' // 패딩 포함한 크기 계산
       }}>
         <SpaceBetween size="s">
           <div style={{ color: 'white', fontSize: '20px' }}>
@@ -1725,7 +1899,7 @@ export default function BubbleShooter() {
           )}
           
           {/* 게임 캔버스 컨테이너 */}
-          <div style={{ position: 'relative', display: 'inline-block' }}>
+          <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
             <canvas
               ref={canvasRef}
               width={500}
@@ -1734,7 +1908,10 @@ export default function BubbleShooter() {
                 border: '3px solid #fff',
                 borderRadius: '10px',
                 background: '#000',
-                cursor: !gameRunning ? 'not-allowed' : 'crosshair'
+                cursor: !gameRunning ? 'not-allowed' : 'crosshair',
+                width: '100%', // 반응형으로 변경
+                height: 'auto', // 비율 유지
+                maxWidth: '500px' // 최대 크기 제한
               }}
             />
           </div>
@@ -1749,6 +1926,334 @@ export default function BubbleShooter() {
           </Box>
         </SpaceBetween>
       </div>
+
+      {/* 엔딩 화면 오버레이 */}
+      {gameResult && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            position: 'relative',
+            maxWidth: '500px',
+            width: '90%',
+            height: '600px',
+            borderRadius: '20px',
+            overflow: 'hidden',
+            boxShadow: '0 0 30px rgba(255, 255, 255, 0.3)',
+            border: '3px solid #fff'
+          }}>
+            {/* 배경 이미지 */}
+            {gameStateRef.current.endingImagesLoaded && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundImage: gameResult.starCount === 3 
+                  ? `url(${gameclearBgImage})` 
+                  : `url(${gameoverBgImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }} />
+            )}
+            
+            {/* 배경 이미지 로딩 실패 시 그라데이션 폴백 */}
+            {!gameStateRef.current.endingImagesLoaded && (
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: gameResult.starCount === 3 
+                  ? 'linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%)'
+                  : 'linear-gradient(135deg, #ff4444 0%, #cc3333 100%)'
+              }} />
+            )}
+            
+            {/* 콘텐츠 오버레이 */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(45deg, rgba(255, 182, 193, 0.3), rgba(221, 160, 221, 0.3), rgba(173, 216, 230, 0.3))',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '20px',
+              textAlign: 'center',
+              zIndex: 1,
+              animation: gameResult.starCount === 3 ? 'sparkle 2s ease-in-out infinite' : 'none'
+            }}>
+              {/* 떠다니는 하트와 별 장식 */}
+              {gameResult.starCount === 3 && (
+                <>
+                  <div style={{
+                    position: 'absolute',
+                    top: '10%',
+                    left: '10%',
+                    fontSize: '24px',
+                    animation: 'float 3s ease-in-out infinite',
+                    animationDelay: '0s'
+                  }}>💖</div>
+                  <div style={{
+                    position: 'absolute',
+                    top: '20%',
+                    right: '15%',
+                    fontSize: '20px',
+                    animation: 'float 3s ease-in-out infinite',
+                    animationDelay: '1s'
+                  }}>✨</div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '30%',
+                    left: '20%',
+                    fontSize: '18px',
+                    animation: 'float 3s ease-in-out infinite',
+                    animationDelay: '2s'
+                  }}>🌟</div>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '20%',
+                    right: '10%',
+                    fontSize: '22px',
+                    animation: 'float 3s ease-in-out infinite',
+                    animationDelay: '0.5s'
+                  }}>💕</div>
+                </>
+              )}
+
+              {/* 타이틀 - 더 귀엽게 */}
+              <div style={{
+                fontSize: '32px',
+                fontWeight: 'bold',
+                color: '#fff',
+                marginBottom: '20px',
+                textShadow: '3px 3px 6px rgba(0, 0, 0, 0.6)',
+                WebkitTextStroke: '1px #ff69b4',
+                zIndex: 3,
+                background: gameResult.starCount === 3 
+                  ? 'linear-gradient(45deg, rgba(255, 182, 193, 0.9), rgba(255, 192, 203, 0.9))'
+                  : 'linear-gradient(45deg, rgba(147, 112, 219, 0.9), rgba(138, 43, 226, 0.9))',
+                padding: '15px 25px',
+                borderRadius: '25px',
+                border: gameResult.starCount === 3 
+                  ? '3px solid #ff69b4' 
+                  : '3px solid #9370db',
+                boxShadow: '0 8px 20px rgba(0, 0, 0, 0.3)',
+                animation: gameResult.starCount === 3 ? 'bounce 1s ease-in-out infinite' : 'pulse 2s ease-in-out infinite'
+              }}>
+                {gameResult.starCount === 3 ? '🎀 PERFECT CLEAR! 🎀' : '😢 TRY AGAIN! 😢'}
+              </div>
+
+              {/* 키로 캐릭터 이미지 - 더 귀엽게 */}
+              {gameStateRef.current.endingImagesLoaded ? (
+                <div style={{
+                  width: '320px',
+                  height: '320px',
+                  backgroundImage: gameResult.starCount === 3 
+                    ? `url(${gameclearKiroImage})` 
+                    : `url(${gameoverKiroImage})`,
+                  backgroundSize: 'contain',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                  marginBottom: '-20px',
+                  filter: gameResult.starCount === 3 
+                    ? 'drop-shadow(0 0 30px rgba(255, 182, 193, 0.8)) brightness(1.1)'
+                    : 'drop-shadow(0 0 30px rgba(147, 112, 219, 0.8))',
+                  zIndex: 0,
+                  animation: gameResult.starCount === 3 ? 'wiggle 2s ease-in-out infinite' : 'sway 3s ease-in-out infinite'
+                }} />
+              ) : (
+                <div style={{
+                  width: '320px',
+                  height: '320px',
+                  background: gameResult.starCount === 3 
+                    ? 'linear-gradient(45deg, #ffb6c1, #ffc0cb)'
+                    : 'linear-gradient(45deg, #dda0dd, #9370db)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '-20px',
+                  fontSize: '32px',
+                  fontWeight: 'bold',
+                  color: '#fff',
+                  zIndex: 0,
+                  boxShadow: '0 0 30px rgba(255, 182, 193, 0.8)',
+                  animation: gameResult.starCount === 3 ? 'wiggle 2s ease-in-out infinite' : 'sway 3s ease-in-out infinite'
+                }}>
+                  {gameResult.starCount === 3 ? '🥰' : '😊'} KIRO
+                </div>
+              )}
+
+              {/* 별 표시 - 더 반짝이게 */}
+              <div style={{ 
+                marginBottom: '10px',
+                zIndex: 4,
+                position: 'relative',
+                animation: 'twinkle 1.5s ease-in-out infinite'
+              }}>
+                {renderStars(gameResult.starCount)}
+              </div>
+
+              {/* 하단 정보 영역 - 파스텔 톤으로 */}
+              <div style={{
+                position: 'relative',
+                zIndex: 1,
+                background: gameResult.starCount === 3 
+                  ? 'linear-gradient(135deg, rgba(255, 182, 193, 0.8), rgba(255, 192, 203, 0.8))'
+                  : 'linear-gradient(135deg, rgba(147, 112, 219, 0.8), rgba(138, 43, 226, 0.8))',
+                padding: '25px',
+                borderRadius: '20px',
+                border: gameResult.starCount === 3 
+                  ? '3px solid #ff69b4' 
+                  : '3px solid #9370db',
+                backdropFilter: 'blur(15px)',
+                maxWidth: '320px',
+                width: '85%',
+                marginTop: '-30px',
+                boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
+              }}>
+                {/* 점수 정보 - 더 귀엽게 */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  padding: '20px',
+                  borderRadius: '15px',
+                  marginBottom: '20px',
+                  border: '2px solid rgba(255, 255, 255, 0.5)',
+                  marginTop: '20px',
+                  boxShadow: 'inset 0 2px 10px rgba(0, 0, 0, 0.1)'
+                }}>
+                  <div style={{
+                    color: gameResult.starCount === 3 ? '#ff1493' : '#8a2be2',
+                    fontSize: '22px',
+                    fontWeight: 'bold',
+                    marginBottom: '10px',
+                    textShadow: '1px 1px 2px rgba(0, 0, 0, 0.3)'
+                  }}>
+                    🏆 SCORE: {gameResult.finalScore.toLocaleString()}
+                  </div>
+                  <div style={{
+                    color: gameResult.starCount === 3 ? '#ff69b4' : '#9370db',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    marginBottom: '5px'
+                  }}>
+                    🫧 BUBBLES: {gameResult.clearedBubbles} / {gameResult.totalBubbles}
+                  </div>
+                  <div style={{
+                    color: gameResult.starCount === 3 ? '#ff1493' : '#8a2be2',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    📊 {((gameResult.clearedBubbles / gameResult.totalBubbles) * 100).toFixed(1)}% Complete!
+                  </div>
+                </div>
+
+                {/* 버튼들 - 더 세련되게 */}
+                <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={restartGame}
+                    style={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '16px 32px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
+                      borderRadius: '50px',
+                      cursor: 'pointer',
+                      boxShadow: '0 8px 25px rgba(102, 126, 234, 0.4)',
+                      transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                      textShadow: 'none',
+                      letterSpacing: '0.5px',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)'
+                      e.currentTarget.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.6)'
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0px) scale(1)'
+                      e.currentTarget.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)'
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    }}
+                  >
+                    <span style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px',
+                      fontSize: '14px'
+                    }}>
+                      <span style={{ fontSize: '18px' }}>↻</span>
+                      다시 도전
+                    </span>
+                  </button>
+                  
+                  <button
+                    onClick={() => window.location.reload()}
+                    style={{
+                      background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+                      color: '#8b4513',
+                      border: 'none',
+                      padding: '16px 32px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
+                      borderRadius: '50px',
+                      cursor: 'pointer',
+                      boxShadow: '0 8px 25px rgba(252, 182, 159, 0.4)',
+                      transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                      textShadow: 'none',
+                      letterSpacing: '0.5px',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)'
+                      e.currentTarget.style.boxShadow = '0 12px 35px rgba(252, 182, 159, 0.6)'
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #fcb69f 0%, #ffecd2 100%)'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0px) scale(1)'
+                      e.currentTarget.style.boxShadow = '0 8px 25px rgba(252, 182, 159, 0.4)'
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)'
+                    }}
+                  >
+                    <span style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px',
+                      fontSize: '14px'
+                    }}>
+                      <span style={{ fontSize: '18px' }}>⌂</span>
+                      메인으로
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
