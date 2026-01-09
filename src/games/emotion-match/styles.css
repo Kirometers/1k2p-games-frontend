@@ -55,21 +55,21 @@ body {
   align-items: center;
 }
 
-/* Background Images for Each Screen */
+/* Background Images for Each Screen - Now handled by inline styles */
 .game-container.main-menu {
-  background-image: url('/games/emotion-match/main_page_no.png');
+  /* background-image handled by inline style */
 }
 
 .game-container.difficulty-select {
-  background-image: url('/games/emotion-match/background_morning.png');
+  /* background-image handled by inline style */
 }
 
 .game-container.character-select {
-  background-image: url('/games/emotion-match/background_evening.png');
+  /* background-image handled by inline style */
 }
 
 .game-container.game-play {
-  background-image: url('/games/emotion-match/background_night.png');
+  /* background-image handled by inline style */
 }
 
 /* Main Menu Styled Buttons - Bottom Center Layout */

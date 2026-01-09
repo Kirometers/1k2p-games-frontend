@@ -1,6 +1,24 @@
 import { useState, useEffect, useCallback, useReducer, useRef } from 'react'
 import './styles.css'
 
+// 이미지 직접 import
+import blackFrightened from './re_black_frightened.png'
+import blueSad from './re_blue_sad.png'
+import greenDisgust from './re_green_disgust.png'
+import greyLove from './re_grey_love.png'
+import orangeShy from './re_orange_shy.png'
+import pinkHappy from './re_pink_happy.png'
+import purpleEnvy from './re_purple_envy.png'
+import redAngry from './re_red_angry.png'
+import whiteSmile from './re_white_smile.png'
+import yellowFrightened from './re_yellow_frightened.png'
+
+// 배경 이미지 import
+import mainPageNo from './main_page_no.png'
+import backgroundMorning from './background_morning.png'
+import backgroundEvening from './background_evening.png'
+import backgroundNight from './background_night.png'
+
 // Types
 type BlockType = string
 type Position = { row: number; col: number }
@@ -54,9 +72,23 @@ const ALL_CHARACTERS = [
   'yellow_frightened'
 ]
 
-// 이미지 경로 함수 (public 폴더 기준 - 가장 안전한 방법)
+// 이미지 매핑 객체
+const CHARACTER_IMAGES: Record<string, string> = {
+  'black_frightened': blackFrightened,
+  'blue_sad': blueSad,
+  'green_disgust': greenDisgust,
+  'grey_love': greyLove,
+  'orange_shy': orangeShy,
+  'pink_happy': pinkHappy,
+  'purple_envy': purpleEnvy,
+  'red_angry': redAngry,
+  'white_smile': whiteSmile,
+  'yellow_frightened': yellowFrightened,
+}
+
+// 이미지 경로 함수
 const getCharacterImage = (character: string) => {
-  return `/games/emotion-match/re_${character}.png`
+  return CHARACTER_IMAGES[character] || CHARACTER_IMAGES['pink_happy'] // 폴백 이미지
 }
 
 // Game reducer
@@ -917,7 +949,10 @@ export default function EmotionMatch() {
   // Render functions
   const renderMainMenu = () => (
     <div className="emotion-match-wrapper">
-      <div className="game-container main-menu">
+      <div 
+        className="game-container main-menu"
+        style={{ backgroundImage: `url(${mainPageNo})` }}
+      >
         <div className="main-menu-buttons-container">
           <button 
             className="main-menu-button play-button"
@@ -938,7 +973,10 @@ export default function EmotionMatch() {
 
   const renderHowToPlay = () => (
     <div className="emotion-match-wrapper">
-      <div className="game-container main-menu">
+      <div 
+        className="game-container main-menu"
+        style={{ backgroundImage: `url(${mainPageNo})` }}
+      >
         <div className="main-menu-buttons-container">
           <button 
             className="main-menu-button play-button"
@@ -1017,7 +1055,10 @@ export default function EmotionMatch() {
 
   const renderDifficultySelect = () => (
     <div className="emotion-match-wrapper">
-      <div className="game-container difficulty-select">
+      <div 
+        className="game-container difficulty-select"
+        style={{ backgroundImage: `url(${backgroundMorning})` }}
+      >
         <div className="themed-screen-content">
           <div className="themed-container">
             <div className="container-header">
@@ -1096,7 +1137,10 @@ export default function EmotionMatch() {
 
   const renderCharacterSelect = () => (
     <div className="emotion-match-wrapper">
-      <div className="game-container character-select">
+      <div 
+        className="game-container character-select"
+        style={{ backgroundImage: `url(${backgroundEvening})` }}
+      >
         <div className="themed-screen-content">
           <div className="themed-container character-select">
             <div className="container-header">
@@ -1171,7 +1215,10 @@ export default function EmotionMatch() {
 
   const renderGameBoard = () => (
     <div className="emotion-match-wrapper">
-      <div className="game-container game-play">
+      <div 
+        className="game-container game-play"
+        style={{ backgroundImage: `url(${backgroundNight})` }}
+      >
         <div className="game-play-content">
           <div className="game-main-split">
             {/* Left Panel - Control & Time */}
