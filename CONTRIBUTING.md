@@ -15,10 +15,17 @@ auto-load it.
 
 These rules keep the Cloudscape look intact and prevent cross-team conflicts.
 
-1. Do not change global UI layout or styling
+**Branch naming conventions:**
+- `game/*` - Game development (scope check **applies**)
+  - Example: `game/space-invaders`, `game/tetris-clone`
+- Anything else - Infrastructure/UI/Core development (scope check **skipped**)
+  - Example: `feature/new-ui`, `fix/routing-bug`, `chore/update-deps`
+
+1. Do not change global UI layout or styling (for game development)
    - Avoid edits to `src/App.tsx`, `src/main.tsx`, and `src/index.css`.
    - Do not add global CSS resets or site-wide styles.
    - Use Cloudscape components and design tokens instead of custom CSS themes.
+   - **Exception:** Non-game branches can freely modify these files.
 
 2. Only touch your game folder
    - Put your work under `src/games/<game-id>/`.
@@ -41,7 +48,8 @@ These rules keep the Cloudscape look intact and prevent cross-team conflicts.
    - For hub text, prefer localized strings (`{ en, ko }`).
 
 4. Keep PRs reviewable
-   - One game per PR.
+   - One game per PR (for game contributions).
+   - Use appropriate branch naming (see above).
    - No unrelated refactors or dependency changes.
    - Include a short demo clip or screenshot in the PR description.
 
@@ -61,6 +69,7 @@ Paste this when asking an AI to work on a mini game:
 
 ```
 Follow `CONTRIBUTING.md` and `src/games/README.md`.
+Use branch name starting with 'game/' for game development.
 Work only inside `src/games/<game-id>/` and `public/games/<game-id>/`.
 Shared utilities can go in `src/games/shared/` if needed by multiple games.
 Add `game.ts` metadata for the hub auto-listing.
@@ -196,3 +205,23 @@ If your game requires specific deployment settings, you may modify:
 
 If a core maintainer needs to edit shared files, set `BYPASS_GAME_SCOPE=true`
 in the CI job or run the check locally with that env var.
+
+## For maintainers: UI and infrastructure development
+
+If you're working on the hub UI, core infrastructure, or CI/CD:
+
+1. **Use any branch name EXCEPT `game/*`:**
+   - `feature/*` for new features
+   - `fix/*` for bug fixes
+   - `chore/*` for maintenance
+   - `docs/*` for documentation
+   - `refactor/*` for refactoring
+   - etc.
+
+2. **Game scope check will be automatically skipped** for non-game branches.
+
+3. **Still follow best practices:**
+   - Keep PRs focused and reviewable
+   - Test changes thoroughly
+   - Update documentation as needed
+   - Consider impact on existing games
