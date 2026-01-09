@@ -7,6 +7,7 @@ import gameoverKiroImage from './gameover_kiro.png'
 import gameoverBgImage from './gameover.png'
 import startBgImage from './start.png'
 import backgroundImage from './background.png'
+import cloudImage from './cloud.png'
 
 // 게임 상수
 const WALL_DESCENT_INTERVAL_MS = 30000  // 30초
@@ -145,7 +146,7 @@ export default function BubbleShooter() {
     trajectory: null as Trajectory | null,
     shooter: { x: 0, y: 0 },
     bubbleRadius: BUBBLE_RADIUS,
-    colors: ['#B8A7E8', '#F8A5A5', '#A5E8B8', '#A5C9F8', '#F8E5A5', '#F8A5E8', '#A5F8E8'],
+    colors: ['#D1C4E9', '#FFCDD2', '#C8E6C9', '#BBDEFB', '#FFF9C4', '#E1BEE7', '#B2EBF2'],
     rows: 8,
     cols: 12,
     wallTimer: null as number | null,
@@ -159,6 +160,7 @@ export default function BubbleShooter() {
     gameoverKiroImage: null as HTMLImageElement | null,
     gameoverBgImage: null as HTMLImageElement | null,
     startBgImage: null as HTMLImageElement | null, // 시작 화면 배경 추가
+    cloudImage: null as HTMLImageElement | null, // 구름 이미지 추가
     endingImagesLoaded: false,
     // 애니메이션 상태
     popParticles: [] as PopParticle[],
@@ -541,9 +543,9 @@ export default function BubbleShooter() {
   const loadEndingImages = () => {
     const state = gameStateRef.current
     let loadedCount = 0
-    const totalImages = 5 // 시작 화면 이미지 추가로 5개
+    const totalImages = 6 // cloud 이미지 추가로 6개
     
-    console.log('[DEV] 🖼️ 이미지 로딩 시작 - 총 5개 이미지')
+    console.log('[DEV] 🖼️ 이미지 로딩 시작 - 총 6개 이미지')
     
     const checkAllLoaded = () => {
       loadedCount++
@@ -612,6 +614,18 @@ export default function BubbleShooter() {
     }
     state.gameoverBgImage.onerror = () => {
       console.warn('[DEV] ❌ gameover 배경 이미지 로드 실패')
+      checkAllLoaded()
+    }
+    
+    // 구름 이미지
+    state.cloudImage = new Image()
+    state.cloudImage.src = cloudImage
+    state.cloudImage.onload = () => {
+      console.log('[DEV] ✅ cloud.png 로드 성공')
+      checkAllLoaded()
+    }
+    state.cloudImage.onerror = () => {
+      console.warn('[DEV] ❌ cloud 이미지 로드 실패')
       checkAllLoaded()
     }
   }
@@ -1835,57 +1849,37 @@ export default function BubbleShooter() {
   }
 
   const drawWallRow = (ctx: CanvasRenderingContext2D, renderRow: number) => {
+    const state = gameStateRef.current
     const y = renderRow * CELL_HEIGHT + BUBBLE_RADIUS
-    const height = CELL_HEIGHT
+    const height = CELL_HEIGHT // 기존 높이로 복원
     const width = 500 // 전체 캔버스 너비
     
-    // 1. 소프트한 그라데이션 배경
+    // cloud 이미지가 로드되었으면 이미지 사용, 아니면 기본 회색 배경
+    if (state.cloudImage && state.endingImagesLoaded) {
+      // cloud 이미지를 전체 너비로 늘려서 그리기
+      ctx.drawImage(
+        state.cloudImage,
+        0, y - height/2,
+        width, height // 전체 너비와 늘어난 높이로 그리기
+      )
+      
+      console.log(`[DEV] 🌤️ 구름 이미지 늘려서 그리기: 위치 y=${y}, 크기=${width}x${height}`)
+    } else {
+      console.log('[DEV] 🌫️ 구름 이미지 미로드, 기본 벽 사용')
+      drawDefaultWall(ctx, y, height, width)
+    }
+  }
+  
+  const drawDefaultWall = (ctx: CanvasRenderingContext2D, y: number, height: number, width: number) => {
+    // 기본 회색 그라데이션 배경
     const gradient = ctx.createLinearGradient(0, y - height/2, 0, y + height/2)
-    gradient.addColorStop(0, '#8a8a8a')    // 상단 밝은 회색
-    gradient.addColorStop(0.3, '#6a6a6a')  // 중간 회색
-    gradient.addColorStop(0.7, '#4a4a4a')  // 어두운 회색
-    gradient.addColorStop(1, '#3a3a3a')    // 하단 가장 어두운 회색
+    gradient.addColorStop(0, '#8a8a8a')
+    gradient.addColorStop(0.3, '#6a6a6a')
+    gradient.addColorStop(0.7, '#4a4a4a')
+    gradient.addColorStop(1, '#3a3a3a')
     
-    // 2. 메인 벽 사각형
     ctx.fillStyle = gradient
     ctx.fillRect(0, y - height/2, width, height)
-    
-    // 3. 상단 하이라이트
-    const topGradient = ctx.createLinearGradient(0, y - height/2, 0, y - height/2 + 6)
-    topGradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)')
-    topGradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
-    
-    ctx.fillStyle = topGradient
-    ctx.fillRect(0, y - height/2, width, 6)
-    
-    // 4. 하단 그림자
-    const bottomGradient = ctx.createLinearGradient(0, y + height/2 - 4, 0, y + height/2)
-    bottomGradient.addColorStop(0, 'rgba(0, 0, 0, 0)')
-    bottomGradient.addColorStop(1, 'rgba(0, 0, 0, 0.3)')
-    
-    ctx.fillStyle = bottomGradient
-    ctx.fillRect(0, y + height/2 - 4, width, 4)
-    
-    // 5. 미세한 텍스처 라인들
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
-    ctx.lineWidth = 0.5
-    for (let i = 0; i < 3; i++) {
-      const lineY = y - height/2 + (i + 1) * height/4
-      ctx.beginPath()
-      ctx.moveTo(0, lineY)
-      ctx.lineTo(width, lineY)
-      ctx.stroke()
-    }
-    
-    // 6. 상하 테두리
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(0, y - height/2)
-    ctx.lineTo(width, y - height/2)
-    ctx.moveTo(0, y + height/2)
-    ctx.lineTo(width, y + height/2)
-    ctx.stroke()
   }
 
   const darkenColor = (color: string, factor: number) => {
@@ -2053,7 +2047,7 @@ export default function BubbleShooter() {
     <div style={{ 
       background: gameState === 'playing' 
         ? `url(${backgroundImage}) center/contain no-repeat` 
-        : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        : 'transparent',
       minHeight: '100vh',
       display: 'flex',
       justifyContent: 'center',
