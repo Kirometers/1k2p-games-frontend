@@ -25,22 +25,36 @@ if (process.env.BYPASS_GAME_SCOPE === 'true') {
   process.exit(0)
 }
 
-const ignoredPrefixes = ['.vite/', '.kiro/']
-const allowedRootFiles = new Set(['package.json', 'package-lock.json', 'vite.config.ts'])
 const changedFiles = getChangedFiles()
-  .map((file) => file.replace(/\\/g, '/').replace(/^\.\//, ''))
-  .filter(
-    (file) =>
-      !ignoredPrefixes.some((prefix) => file.startsWith(prefix)) &&
-      !allowedRootFiles.has(file),
-  )
 
 if (changedFiles.length === 0) {
   process.stdout.write('No file changes detected.\n')
   process.exit(0)
 }
 
-const invalidFiles = changedFiles.filter((file) => !file.startsWith('src/games/'))
+// Allow changes in:
+// 1. src/games/<game-id>/ - game source code
+// 2. public/games/<game-id>/ - game static assets
+// 3. Test infrastructure files (with warning)
+const allowedTestInfraFiles = [
+  'package.json',
+  'package-lock.json',
+  'vite.config.ts',
+  'vitest.config.ts',
+]
+
+const invalidFiles = changedFiles.filter((file) => {
+  // Allow game source files
+  if (file.startsWith('src/games/')) return false
+  
+  // Allow game public assets
+  if (file.startsWith('public/games/')) return false
+  
+  // Allow test infrastructure files
+  if (allowedTestInfraFiles.includes(file)) return false
+  
+  return true
+})
 
 if (invalidFiles.length > 0) {
   process.stderr.write(
@@ -49,21 +63,47 @@ if (invalidFiles.length > 0) {
   process.exit(1)
 }
 
-const shallowFiles = changedFiles.filter((file) => file.split('/').length < 4)
+// Warn about test infrastructure changes
+const testInfraChanges = changedFiles.filter((file) => allowedTestInfraFiles.includes(file))
+if (testInfraChanges.length > 0) {
+  process.stdout.write(
+    `⚠️  Test infrastructure files modified:\n${testInfraChanges.map((file) => `- ${file}`).join('\n')}\n`,
+  )
+  process.stdout.write('These changes will require maintainer review.\n\n')
+}
+
+const shallowFiles = changedFiles.filter((file) => {
+  // Only check game files (src/games/ and public/games/)
+  if (!file.startsWith('src/games/') && !file.startsWith('public/games/')) {
+    return false
+  }
+  return file.split('/').length < 4
+})
 
 if (shallowFiles.length > 0) {
   process.stderr.write(
-    `Changes must live inside src/games/<game-id>/. Invalid paths:\n${shallowFiles
+    `Changes must live inside src/games/<game-id>/ or public/games/<game-id>/. Invalid paths:\n${shallowFiles
       .map((file) => `- ${file}`)
       .join('\n')}\n`,
   )
   process.exit(1)
 }
 
+// Extract game IDs from both src/games/ and public/games/
 const gameIds = new Set(
   changedFiles
-    .map((file) => file.split('/').slice(0, 3).join('/'))
-    .map((prefix) => prefix.replace('src/games/', ''))
+    .filter((file) => file.startsWith('src/games/') || file.startsWith('public/games/'))
+    .map((file) => {
+      if (file.startsWith('src/games/')) {
+        return file.split('/').slice(0, 3).join('/')
+      }
+      if (file.startsWith('public/games/')) {
+        return file.split('/').slice(0, 3).join('/')
+      }
+      return null
+    })
+    .filter(Boolean)
+    .map((prefix) => prefix.replace(/^(src|public)\/games\//, ''))
     .filter(Boolean),
 )
 
