@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, SpaceBetween } from '@cloudscape-design/components'
+import { SpaceBetween } from '@cloudscape-design/components'
 import kiroImage from './krio.png'
 import gameclearKiroImage from './gameclear_kiro.png'
 import gameclearBgImage from './gameclear.png'
@@ -19,9 +19,9 @@ const playPopSound = () => {
   try {
     popSound.currentTime = 0 // 사운드를 처음부터 재생
     popSound.volume = 0.4 // 볼륨 조절
-    popSound.play().catch(e => console.log('Pop sound play failed:', e))
-  } catch (e) {
-    console.log('Pop sound error:', e)
+    popSound.play().catch(() => {})
+  } catch {
+    // 사운드 에러 무시
   }
 }
 
@@ -36,8 +36,8 @@ const CELL_WIDTH = BUBBLE_RADIUS * 2     // 40px
 const CELL_HEIGHT = Math.floor(BUBBLE_RADIUS * 1.7)  // 34px (정수로 고정)
 const ROW_OFFSET_X = BUBBLE_RADIUS       // 홀수 행 오프셋
 
-// 개발 모드 검증 활성화 (프로덕션에서는 false)
-const DEV_MODE_VALIDATION = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+// 개발 모드 검증 비활성화
+const DEV_MODE_VALIDATION = false
 
 interface Bubble {
   color: string
@@ -211,7 +211,7 @@ export default function BubbleShooter() {
   })
 
   // 버블 배열 불변성 검증 헬퍼 함수들 (강화된 버전)
-  const createBubbleSnapshot = (bubbles: Bubble[], snapshotName: string = '') => {
+  const createBubbleSnapshot = (bubbles: Bubble[]) => {
     if (!DEV_MODE_VALIDATION) return null
     
     const snapshot = bubbles.map((bubble, index) => ({
@@ -224,58 +224,16 @@ export default function BubbleShooter() {
       renderPos: getBubbleRenderPosition(bubble) // 렌더링 위치도 기록
     }))
     
-    console.log(`[DEV] 📸 버블 스냅샷 생성: ${snapshotName}`)
-    console.log(`[DEV] 📸 총 ${snapshot.length}개 버블 기록됨`)
-    console.table(snapshot.map(s => ({
-      ID: s.id,
-      색상: s.color,
-      격자행: s.gridRow,
-      격자열: s.gridCol,
-      렌더X: Math.round(s.renderPos.x),
-      렌더Y: Math.round(s.renderPos.y)
-    })))
-    
     return snapshot
   }
 
-  const validateBubbleIntegrity = (beforeSnapshot: any[], afterBubbles: Bubble[], operation: string) => {
+  const validateBubbleIntegrity = (beforeSnapshot: any[], afterBubbles: Bubble[]) => {
     if (!DEV_MODE_VALIDATION || !beforeSnapshot) return true
-
-    console.log(`[DEV] 🔍 버블 무결성 검증 시작: ${operation}`)
-    console.log(`[DEV] 🔍 이전 스냅샷: ${beforeSnapshot.length}개, 현재 배열: ${afterBubbles.length}개`)
 
     // 새로 추가된 버블과 기존 버블 분류
     const existingBubbles = afterBubbles.filter(bubble => 
       beforeSnapshot.some(snap => snap.id === bubble.id)
     )
-    const newBubbles = afterBubbles.filter(bubble => 
-      !beforeSnapshot.some(snap => snap.id === bubble.id)
-    )
-    const removedBubbles = beforeSnapshot.filter(snap => 
-      !afterBubbles.some(bubble => bubble.id === snap.id)
-    )
-
-    console.log(`[DEV] 📊 버블 변화 요약:`)
-    console.log(`[DEV] 📊   기존 유지: ${existingBubbles.length}개`)
-    console.log(`[DEV] 📊   새로 추가: ${newBubbles.length}개`)
-    console.log(`[DEV] 📊   제거됨: ${removedBubbles.length}개`)
-
-    // 제거된 버블 상세 로그
-    if (removedBubbles.length > 0) {
-      console.log(`[DEV] 🗑️ 제거된 버블들:`)
-      removedBubbles.forEach(removed => {
-        console.log(`[DEV] 🗑️   ID: ${removed.id}, 색상: ${removed.color}, 위치: (${removed.gridRow}, ${removed.gridCol})`)
-      })
-    }
-
-    // 새로 추가된 버블 상세 로그
-    if (newBubbles.length > 0) {
-      console.log(`[DEV] ➕ 새로 추가된 버블들:`)
-      newBubbles.forEach(newBubble => {
-        const renderPos = getBubbleRenderPosition(newBubble)
-        console.log(`[DEV] ➕   ID: ${newBubble.id}, 색상: ${newBubble.color}, 격자: (${newBubble.gridRow}, ${newBubble.gridCol}), 렌더: (${Math.round(renderPos.x)}, ${Math.round(renderPos.y)})`)
-      })
-    }
 
     // ⚠️ 핵심: 기존 버블들의 데이터 무결성 검증 (벽 하강 시 절대 변경되면 안 됨)
     let integrityViolations = 0
@@ -305,30 +263,13 @@ export default function BubbleShooter() {
         
         violationDetails.push(violation)
         integrityViolations++
-        
-        console.error(`[DEV] ⚠️ 버블 무결성 위반 감지! ${operation}`)
-        console.error(`[DEV] ⚠️   버블 ID: ${bubble.id}`)
-        console.error(`[DEV] ⚠️   색상 변화: ${originalSnap.color} → ${bubble.color}`)
-        console.error(`[DEV] ⚠️   격자 행 변화: ${originalSnap.gridRow} → ${bubble.gridRow}`)
-        console.error(`[DEV] ⚠️   격자 열 변화: ${originalSnap.gridCol} → ${bubble.gridCol}`)
-        console.error(`[DEV] ⚠️   렌더 위치 변화: (${Math.round(originalSnap.renderPos.x)}, ${Math.round(originalSnap.renderPos.y)}) → (${Math.round(currentRenderPos.x)}, ${Math.round(currentRenderPos.y)})`)
       }
     })
 
     if (integrityViolations > 0) {
-      console.error(`[DEV] 🚨 ${operation}에서 ${integrityViolations}개 버블의 데이터가 변경됨!`)
-      console.error(`[DEV] 🚨 벽 하강은 버블 배열을 수정하지 말고 오프셋만 변경해야 합니다!`)
-      console.table(violationDetails)
-      
-      // 현재 보드 오프셋 상태도 출력
-      const state = gameStateRef.current
-      console.error(`[DEV] 🚨 현재 보드 오프셋: ${state.boardOffsetRows}`)
-      
       return false
     }
 
-    console.log(`[DEV] ✅ ${operation}: 버블 배열 무결성 검증 통과`)
-    console.log(`[DEV] ✅   기존 ${existingBubbles.length}개 버블의 데이터가 모두 보존됨`)
     return true
   }
 
@@ -363,46 +304,6 @@ export default function BubbleShooter() {
       startTime: now,
       duration: duration * intensity, // 강도에 따라 지속시간 조정
       intensity
-    }
-    
-    console.log(`[DEV] 🎭 키로 모션 트리거: ${type}, 강도: ${intensity}, 지속시간: ${duration * intensity}ms`)
-  }
-
-  const getKiroTransform = () => {
-    const state = gameStateRef.current
-    const motion = state.kiroMotion
-    
-    if (motion.type === 'idle') return 'none'
-    
-    const now = Date.now()
-    const elapsed = now - motion.startTime
-    const progress = Math.min(elapsed / motion.duration, 1)
-    
-    // 모션이 끝났으면 idle로 복귀
-    if (progress >= 1) {
-      state.kiroMotion.type = 'idle'
-      return 'none'
-    }
-    
-    const easeOut = 1 - Math.pow(1 - progress, 3) // 부드러운 감속
-    const bounce = Math.sin(progress * Math.PI * 4) * (1 - progress) // 진동 효과
-    
-    switch (motion.type) {
-      case 'jump':
-        const jumpHeight = 15 * motion.intensity * (1 - Math.pow(progress - 0.5, 2) * 4)
-        return `translateY(${-Math.max(0, jumpHeight)}px)`
-        
-      case 'spin':
-        const rotation = 360 * motion.intensity * easeOut
-        return `rotate(${rotation}deg)`
-        
-      case 'bounce':
-        const bounceY = Math.abs(bounce) * 8 * motion.intensity
-        const bounceX = bounce * 3 * motion.intensity
-        return `translate(${bounceX}px, ${-bounceY}px)`
-        
-      default:
-        return 'none'
     }
   }
 
@@ -569,7 +470,6 @@ export default function BubbleShooter() {
         state.imageLoaded = true
       }
       state.kiroImage.onerror = () => {
-        console.warn('[DEV] kiro 이미지를 로드할 수 없습니다.')
         state.imageLoaded = false
       }
     }
@@ -585,27 +485,20 @@ export default function BubbleShooter() {
     let loadedCount = 0
     const totalImages = 7 // cloud2 이미지 추가로 7개
     
-    console.log('[DEV] 🖼️ 이미지 로딩 시작 - 총 7개 이미지')
-    
     const checkAllLoaded = () => {
       loadedCount++
-      console.log(`[DEV] 🖼️ 이미지 로드 진행: ${loadedCount}/${totalImages}`)
       if (loadedCount === totalImages) {
         state.endingImagesLoaded = true
-        console.log('[DEV] ✅ 모든 이미지 로드 완료!')
       }
     }
     
     // 시작 화면 배경 이미지
-    console.log('[DEV] 🖼️ start.png 로딩 시작...')
     state.startBgImage = new Image()
     state.startBgImage.src = startBgImage
     state.startBgImage.onload = () => {
-      console.log('[DEV] ✅ start.png 로드 성공')
       checkAllLoaded()
     }
     state.startBgImage.onerror = () => {
-      console.warn('[DEV] ❌ start 배경 이미지 로드 실패')
       checkAllLoaded()
     }
     
@@ -613,11 +506,9 @@ export default function BubbleShooter() {
     state.gameclearKiroImage = new Image()
     state.gameclearKiroImage.src = gameclearKiroImage
     state.gameclearKiroImage.onload = () => {
-      console.log('[DEV] ✅ gameclear_kiro.png 로드 성공')
       checkAllLoaded()
     }
     state.gameclearKiroImage.onerror = () => {
-      console.warn('[DEV] ❌ gameclear_kiro 이미지 로드 실패')
       checkAllLoaded()
     }
     
@@ -625,11 +516,9 @@ export default function BubbleShooter() {
     state.gameclearBgImage = new Image()
     state.gameclearBgImage.src = gameclearBgImage
     state.gameclearBgImage.onload = () => {
-      console.log('[DEV] ✅ gameclear.png 로드 성공')
       checkAllLoaded()
     }
     state.gameclearBgImage.onerror = () => {
-      console.warn('[DEV] ❌ gameclear 배경 이미지 로드 실패')
       checkAllLoaded()
     }
     
@@ -637,11 +526,9 @@ export default function BubbleShooter() {
     state.gameoverKiroImage = new Image()
     state.gameoverKiroImage.src = gameoverKiroImage
     state.gameoverKiroImage.onload = () => {
-      console.log('[DEV] ✅ gameover_kiro.png 로드 성공')
       checkAllLoaded()
     }
     state.gameoverKiroImage.onerror = () => {
-      console.warn('[DEV] ❌ gameover_kiro 이미지 로드 실패')
       checkAllLoaded()
     }
     
@@ -649,11 +536,9 @@ export default function BubbleShooter() {
     state.gameoverBgImage = new Image()
     state.gameoverBgImage.src = gameoverBgImage
     state.gameoverBgImage.onload = () => {
-      console.log('[DEV] ✅ gameover.png 로드 성공')
       checkAllLoaded()
     }
     state.gameoverBgImage.onerror = () => {
-      console.warn('[DEV] ❌ gameover 배경 이미지 로드 실패')
       checkAllLoaded()
     }
     
@@ -661,11 +546,9 @@ export default function BubbleShooter() {
     state.cloudImage = new Image()
     state.cloudImage.src = cloudImage
     state.cloudImage.onload = () => {
-      console.log('[DEV] ✅ cloud.png 로드 성공')
       checkAllLoaded()
     }
     state.cloudImage.onerror = () => {
-      console.warn('[DEV] ❌ cloud 이미지 로드 실패')
       checkAllLoaded()
     }
     
@@ -673,11 +556,9 @@ export default function BubbleShooter() {
     state.cloud2Image = new Image()
     state.cloud2Image.src = cloud2Image
     state.cloud2Image.onload = () => {
-      console.log('[DEV] ✅ cloud2.png 로드 성공')
       checkAllLoaded()
     }
     state.cloud2Image.onerror = () => {
-      console.warn('[DEV] ❌ cloud2 이미지 로드 실패')
       checkAllLoaded()
     }
   }
@@ -686,12 +567,7 @@ export default function BubbleShooter() {
     const state = gameStateRef.current
     state.bubbles = []
     
-    console.log('[DEV] 🎮 초기 버블 생성 시작')
-    console.log(`[DEV] 🎮 격자 설정: CELL_WIDTH=${CELL_WIDTH}, CELL_HEIGHT=${CELL_HEIGHT}, ROW_OFFSET_X=${ROW_OFFSET_X}`)
-    
     for (let row = 0; row < 5; row++) {
-      console.log(`[DEV] 🎮 행 ${row} 생성 시작 (${row % 2 === 0 ? '짝수' : '홀수'} 행)`)
-      
       for (let col = 0; col < state.cols; col++) {
         const offsetX = (row % 2) * ROW_OFFSET_X
         const x = col * CELL_WIDTH + BUBBLE_RADIUS + offsetX
@@ -704,14 +580,7 @@ export default function BubbleShooter() {
             gridCol: col
           })
           
-          // 렌더링 위치 계산 및 검증
-          const renderPos = getBubbleRenderPosition(newBubble)
-          
           state.bubbles.push(newBubble)
-          
-          console.log(`[DEV] 🎮   초기 버블: ID=${newBubble.id}, 색상=${newBubble.color}, 격자=(${newBubble.gridRow}, ${newBubble.gridCol}), 렌더=(${Math.round(renderPos.x)}, ${Math.round(renderPos.y)})`)
-        } else {
-          console.log(`[DEV] 🎮   경계 초과로 스킵: 행=${row}, 열=${col}, x=${Math.round(x)}`)
         }
       }
     }
@@ -719,17 +588,6 @@ export default function BubbleShooter() {
     // 초기 버블 수 저장 (벽 블록 제외)
     state.totalBubbles = state.bubbles.filter(bubble => !bubble.isWall).length
     state.clearedBubbles = 0
-    
-    console.log(`[DEV] 🎮 초기 버블 생성 완료: ${state.bubbles.length}개 (일반 버블: ${state.totalBubbles}개)`)
-    
-    // 초기 버블들의 렌더링 위치 검증
-    console.log(`[DEV] 🎮 초기 버블 렌더링 위치 검증:`)
-    state.bubbles.forEach((bubble, index) => {
-      const pos = getBubbleRenderPosition(bubble)
-      if (index < 5) { // 처음 5개만 로그
-        console.log(`[DEV] 🎮   버블 ${index}: (${bubble.gridRow}, ${bubble.gridCol}) → (${Math.round(pos.x)}, ${Math.round(pos.y)})`)
-      }
-    })
   }
 
   // 버블의 실제 렌더링 위치 계산 (오프셋 기반 수직 이동)
@@ -787,25 +645,19 @@ export default function BubbleShooter() {
     // 현재 보드에 있는 일반 버블들 (벽 블록 제외)
     const normalBubbles = state.bubbles.filter(bubble => !bubble.isWall)
     
-    console.log(`[DEV] 🎨 색상 선택: 현재 일반 버블 수 = ${normalBubbles.length}개`)
-    
     // 10개 이하로 남으면 남은 구슬 색상에서만 선택
     if (normalBubbles.length <= 10 && normalBubbles.length > 0) {
       // 현재 보드에 있는 색상들만 추출
       const existingColors = [...new Set(normalBubbles.map(bubble => bubble.color))]
       
-      console.log(`[DEV] 🎨 10개 이하 모드: 남은 색상 = [${existingColors.join(', ')}]`)
-      
       if (existingColors.length > 0) {
         const selectedColor = existingColors[Math.floor(Math.random() * existingColors.length)]
-        console.log(`[DEV] 🎨 선택된 색상: ${selectedColor}`)
         return selectedColor
       }
     }
     
     // 일반 모드: 전체 색상에서 랜덤 선택
     const selectedColor = state.colors[Math.floor(Math.random() * state.colors.length)]
-    console.log(`[DEV] 🎨 일반 모드 선택된 색상: ${selectedColor}`)
     return selectedColor
   }
 
@@ -853,8 +705,6 @@ export default function BubbleShooter() {
       Math.pow(state.currentBubble.dy, 2)
     )
     
-    console.log(`[DEV] 🚀 버블 업데이트: 속도=${speed.toFixed(2)}, 위치=(${state.currentBubble.x.toFixed(1)}, ${state.currentBubble.y.toFixed(1)})`)
-    
     // 서브스텝 계산 (빠른 이동 시 여러 번으로 나누기)
     const maxMovePerStep = BUBBLE_RADIUS * 0.8 // 조금 더 큰 스텝 허용
     const frameMoveDistance = speed
@@ -862,10 +712,6 @@ export default function BubbleShooter() {
     
     let subStepDx = state.currentBubble.dx / subSteps
     let subStepDy = state.currentBubble.dy / subSteps
-    
-    if (subSteps > 1) {
-      console.log(`[DEV] 🔄 서브스텝 적용: 프레임거리=${frameMoveDistance.toFixed(1)}, 서브스텝=${subSteps}개, 스텝당거리=${(frameMoveDistance/subSteps).toFixed(1)}`)
-    }
     
     // 서브스텝으로 이동 및 충돌 검사
     for (let step = 0; step < subSteps; step++) {
@@ -876,34 +722,26 @@ export default function BubbleShooter() {
       state.currentBubble.x += subStepDx
       state.currentBubble.y += subStepDy
       
-      const stepDistance = Math.sqrt(subStepDx * subStepDx + subStepDy * subStepDy)
-      
-      console.log(`[DEV] 🔄 서브스텝 ${step + 1}/${subSteps}: (${prevX.toFixed(1)}, ${prevY.toFixed(1)}) → (${state.currentBubble.x.toFixed(1)}, ${state.currentBubble.y.toFixed(1)}), 거리=${stepDistance.toFixed(1)}`)
-      
       // 벽 충돌 처리 (서브스텝마다 체크)
       let wallBounced = false
       if (state.currentBubble.x <= BUBBLE_RADIUS) {
         state.currentBubble.x = BUBBLE_RADIUS
         state.currentBubble.dx = -state.currentBubble.dx
         wallBounced = true
-        console.log(`[DEV] 🏀 좌측 벽 반사: 새 방향=(${state.currentBubble.dx.toFixed(1)}, ${state.currentBubble.dy.toFixed(1)})`)
       } else if (state.currentBubble.x >= 500 - BUBBLE_RADIUS) {
         state.currentBubble.x = 500 - BUBBLE_RADIUS
         state.currentBubble.dx = -state.currentBubble.dx
         wallBounced = true
-        console.log(`[DEV] 🏀 우측 벽 반사: 새 방향=(${state.currentBubble.dx.toFixed(1)}, ${state.currentBubble.dy.toFixed(1)})`)
       }
       
       // 벽 반사 후 남은 서브스텝들의 이동량 재계산
       if (wallBounced && step < subSteps - 1) {
         subStepDx = state.currentBubble.dx / subSteps
         subStepDy = state.currentBubble.dy / subSteps
-        console.log(`[DEV] 🏀 벽 반사 후 서브스텝 재계산: 새 스텝당 이동=(${subStepDx.toFixed(1)}, ${subStepDy.toFixed(1)})`)
       }
       
       // 천장에 닿으면 붙이기
       if (state.currentBubble.y <= BUBBLE_RADIUS + 2) {
-        console.log(`[DEV] 🏀 천장 도달: y=${state.currentBubble.y.toFixed(1)} <= ${BUBBLE_RADIUS + 2}`)
         attachBubbleToTop()
         return
       }
@@ -912,8 +750,6 @@ export default function BubbleShooter() {
       const shouldStop = checkMovementTermination(prevX, prevY, state.currentBubble.x, state.currentBubble.y)
       
       if (shouldStop) {
-        console.log(`[DEV] 🛑 이동 종료 트리거 감지 - 빈 공간 우선 스냅 시작`)
-        
         // 현재 위치 기준으로 최적의 빈 셀 찾기
         snapToOptimalEmptyCell()
         return
@@ -935,8 +771,6 @@ export default function BubbleShooter() {
     const rayDirX = rayDx / rayLength
     const rayDirY = rayDy / rayLength
     
-    console.log(`[DEV] 🔍 이동 종료 체크: (${startX.toFixed(1)}, ${startY.toFixed(1)}) → (${endX.toFixed(1)}, ${endY.toFixed(1)}), 길이=${rayLength.toFixed(2)}`)
-    
     // 완화된 충돌 검사 (더 관대한 기준)
     for (let bubble of state.bubbles) {
       const bubblePos = getBubbleRenderPosition(bubble)
@@ -955,10 +789,7 @@ export default function BubbleShooter() {
         const isGlancing = checkIfGlancingCollision(endX, endY, rayDirX, rayDirY, bubblePos)
         
         if (!isGlancing) {
-          console.log(`[DEV] 🔍   유의미한 충돌: ID=${bubble.id}, 거리=${distanceToEnd.toFixed(1)}, 반지름=${collisionRadius.toFixed(1)}`)
           return true
-        } else {
-          console.log(`[DEV] 🌊   스치기 충돌 무시: ID=${bubble.id}, 거리=${distanceToEnd.toFixed(1)}`)
         }
       }
     }
@@ -995,15 +826,10 @@ export default function BubbleShooter() {
     const state = gameStateRef.current
     if (!state.currentBubble) return
     
-    console.log(`[DEV] 🎯 빈 공간 우선 스냅 시작`)
-    console.log(`[DEV] 🎯   현재 위치: (${state.currentBubble.x.toFixed(1)}, ${state.currentBubble.y.toFixed(1)})`)
-    console.log(`[DEV] 🎯   현재 색상: "${state.currentBubble.color}"`)
-    
     // 1단계: 현재 위치 주변의 모든 빈 셀 찾기
     const emptyCells = findAllEmptyCells(state.currentBubble.x, state.currentBubble.y)
     
     if (emptyCells.length === 0) {
-      console.log(`[DEV] 🎯 빈 셀 없음 - 천장에 강제 부착`)
       attachBubbleToTop()
       return
     }
@@ -1012,7 +838,6 @@ export default function BubbleShooter() {
     const validCells = emptyCells.filter(cell => isAdjacentToExistingBubbles(cell.gridRow, cell.gridCol))
     
     if (validCells.length === 0) {
-      console.log(`[DEV] 🎯 인접한 빈 셀 없음 - 천장에 강제 부착`)
       attachBubbleToTop()
       return
     }
@@ -1021,7 +846,6 @@ export default function BubbleShooter() {
     let bestCell = validCells[0]
     let minDistance = Infinity
     
-    console.log(`[DEV] 🎯 유효한 빈 셀들:`)
     for (let i = 0; i < validCells.length; i++) {
       const cell = validCells[i]
       const distance = Math.sqrt(
@@ -1029,15 +853,11 @@ export default function BubbleShooter() {
         Math.pow(state.currentBubble.y - cell.y, 2)
       )
       
-      console.log(`[DEV] 🎯   ${i + 1}. 그리드=(${cell.gridRow}, ${cell.gridCol}), 픽셀=(${Math.round(cell.x)}, ${Math.round(cell.y)}), 거리=${distance.toFixed(1)}`)
-      
       if (distance < minDistance) {
         minDistance = distance
         bestCell = cell
       }
     }
-    
-    console.log(`[DEV] ✅ 최적 빈 셀 선택: 그리드=(${bestCell.gridRow}, ${bestCell.gridCol}), 거리=${minDistance.toFixed(1)}`)
     
     // 4단계: 선택된 빈 셀에 버블 배치
     const newBubble = assignBubbleId({
@@ -1046,8 +866,6 @@ export default function BubbleShooter() {
       gridCol: bestCell.gridCol,
       isWall: false
     })
-    
-    console.log(`[DEV] 🎯 빈 셀 스냅 완료: ID=${newBubble.id}, 색상="${newBubble.color}", 그리드=(${newBubble.gridRow}, ${newBubble.gridCol})`)
     
     state.bubbles.push(newBubble)
     
@@ -1066,8 +884,6 @@ export default function BubbleShooter() {
     // 현재 위치를 그리드 좌표로 변환
     const currentGridCol = Math.round((currentX - BUBBLE_RADIUS) / CELL_WIDTH)
     const currentGridRow = Math.round((currentY - BUBBLE_RADIUS) / CELL_HEIGHT) - state.boardOffsetRows
-    
-    console.log(`[DEV] 🔍 빈 셀 탐색: 현재 그리드 위치 추정 (${currentGridRow}, ${currentGridCol})`)
     
     // 현재 위치 주변 5x5 영역 검사
     const searchRadius = 2
@@ -1113,7 +929,6 @@ export default function BubbleShooter() {
     // 거리순 정렬
     emptyCells.sort((a, b) => a.distance - b.distance)
     
-    console.log(`[DEV] 🔍 발견된 빈 셀: ${emptyCells.length}개`)
     return emptyCells
   }
 
@@ -1147,7 +962,6 @@ export default function BubbleShooter() {
       if (progress >= 1) {
         state.cloudWall.revealedHeight = state.wallDescentAnimation.targetHeight
         state.wallDescentAnimation.isAnimating = false
-        console.log(`[DEV] 🌊 구름 벽 드러나기 애니메이션 완료 - 최종 높이: ${state.cloudWall.revealedHeight.toFixed(1)}px`)
         
         // 애니메이션 완료 후 게임오버 체크
         checkGameOver()
@@ -1257,8 +1071,6 @@ export default function BubbleShooter() {
     const gridX = Math.round((state.currentBubble.x - BUBBLE_RADIUS) / CELL_WIDTH)
     const gridY = 0  // 항상 최상단(0행)에 부착
     
-    console.log(`[DEV] 🎯 천장 부착 계산: 현재위치=(${state.currentBubble.x.toFixed(1)}, ${state.currentBubble.y.toFixed(1)}) → 그리드=(${gridY}, ${gridX})`)
-    
     const newBubble = assignBubbleId({
       color: state.currentBubble.color,
       gridRow: gridY,
@@ -1266,14 +1078,9 @@ export default function BubbleShooter() {
       isWall: false // 쏜 버블은 항상 일반 버블
     })
     
-    // 렌더링 위치 확인
-    const renderPos = getBubbleRenderPosition(newBubble)
-    console.log(`[DEV] 🎯 천장에 버블 부착: ID=${newBubble.id}, 색상="${newBubble.color}", 그리드=(${newBubble.gridRow}, ${newBubble.gridCol}), 렌더=(${Math.round(renderPos.x)}, ${Math.round(renderPos.y)})`)
-    
     state.bubbles.push(newBubble)
     
     // 매칭 검사 전 주변 상황 로깅
-    console.log(`[DEV] 🎯 천장 부착 후 매칭 검사 시작...`)
     checkMatches(newBubble)
     
     createNewBubble()
@@ -1284,34 +1091,13 @@ export default function BubbleShooter() {
   }
 
   const checkMatches = (bubble: Bubble) => {
-    console.log(`[DEV] 🎯 매칭 검사 시작: 버블 ID=${bubble.id}, 색상=${bubble.color}, 위치=(${bubble.gridRow}, ${bubble.gridCol})`)
-    
-    // 디버깅: 붙인 직후 버블 정보 상세 출력
-    const bubblePos = getBubbleRenderPosition(bubble)
-    console.log(`[DEV] 🎯 버블 렌더 위치: (${Math.round(bubblePos.x)}, ${Math.round(bubblePos.y)})`)
-    console.log(`[DEV] 🎯 버블 색상 (문자열): "${bubble.color}"`)
-    console.log(`[DEV] 🎯 벽 블록 여부: ${bubble.isWall || false}`)
-    
     // 매칭 검사 전 버블 상태 스냅샷
-    const beforeSnapshot = createBubbleSnapshot(gameStateRef.current.bubbles, '매칭 검사 전')
+    const beforeSnapshot = createBubbleSnapshot(gameStateRef.current.bubbles)
     
     const matches = findMatches(bubble, bubble.color, [])
     
-    console.log(`[DEV] 🎯 매칭 결과: ${matches.length}개 버블 발견`)
-    
-    // 디버깅: 찾은 매칭 버블들 상세 정보
-    if (matches.length > 0) {
-      console.log(`[DEV] 🎯 매칭된 버블들:`)
-      matches.forEach((match, index) => {
-        const matchPos = getBubbleRenderPosition(match)
-        console.log(`[DEV] 🎯   ${index + 1}. ID=${match.id}, 색상="${match.color}", 위치=(${match.gridRow}, ${match.gridCol}), 렌더=(${Math.round(matchPos.x)}, ${Math.round(matchPos.y)})`)
-      })
-    }
-    
     if (matches.length >= 3) {
       const state = gameStateRef.current
-      
-      console.log(`[DEV] ✅ 매칭 성공! ${matches.length}개 버블 제거 시작`)
       
       // 버블 터지는 사운드 재생
       playPopSound()
@@ -1331,15 +1117,11 @@ export default function BubbleShooter() {
       matches.forEach(match => {
         const pos = getBubbleRenderPosition(match)
         createPopEffect(pos.x, pos.y, match.color)
-        console.log(`[DEV] 💥   제거 대상: ID=${match.id}, 색상=${match.color}, 위치=(${match.gridRow}, ${match.gridCol})`)
       })
       
       // 제거된 버블 수 누적 (벽 블록 제외)
       const removedNormalBubbles = matches.filter(match => !match.isWall).length
       state.clearedBubbles += removedNormalBubbles
-      
-      console.log(`[DEV] 🎯 매칭으로 제거된 일반 버블: ${removedNormalBubbles}개`)
-      console.log(`[DEV] 🎯 누적 제거된 버블: ${state.clearedBubbles}/${state.totalBubbles}개`)
       
       for (let match of matches) {
         const index = state.bubbles.indexOf(match)
@@ -1352,53 +1134,22 @@ export default function BubbleShooter() {
       setScore(prev => {
         const newScore = prev + matchScore
         scoreRef.current = newScore // ref도 업데이트
-        console.log(`[DEV] 🎯 점수 업데이트: ${prev} → ${newScore} (+${matchScore})`)
         return newScore
       })
       
-      console.log(`[DEV] 🎯 제거된 버블 누적: ${state.clearedBubbles}/${state.totalBubbles}`)
-      
       // 매칭 후 버블 무결성 검증
-      validateBubbleIntegrity(beforeSnapshot || [], state.bubbles, '버블 매칭 제거')
+      validateBubbleIntegrity(beforeSnapshot || [], state.bubbles)
       
       // ⚠️ 중요: 떠있는 버블 제거는 매칭 시에만 실행 (벽 하강과 분리)
-      console.log(`[DEV] 🎯 떠있는 버블 제거 시작...`)
       
       // ref의 최신 점수를 사용
       setTimeout(() => removeFloatingBubbles(), 0)
-    } else {
-      console.log(`[DEV] ❌ 매칭 실패: ${matches.length}개 < 3개 (제거 안 함)`)
-      
-      // 디버깅: 매칭 실패 시 주변 버블들 확인
-      console.log(`[DEV] 🔍 주변 버블 분석:`)
-      const state = gameStateRef.current
-      const bubblePos = getBubbleRenderPosition(bubble)
-      
-      for (let other of state.bubbles) {
-        if (other === bubble) continue
-        
-        const otherPos = getBubbleRenderPosition(other)
-        const distance = Math.sqrt(
-          Math.pow(bubblePos.x - otherPos.x, 2) + 
-          Math.pow(bubblePos.y - otherPos.y, 2)
-        )
-        
-        if (distance < BUBBLE_RADIUS * 2.5) {
-          const colorMatch = other.color === bubble.color
-          console.log(`[DEV] 🔍   인접 버블: ID=${other.id}, 색상="${other.color}", 거리=${distance.toFixed(1)}, 색상매칭=${colorMatch}, 벽=${other.isWall || false}`)
-        }
-      }
     }
   }
 
   const findMatches = (bubble: Bubble, color: string, visited: Bubble[]): Bubble[] => {
     // 벽 블록이거나 이미 방문했거나 색상이 다르면 제외
     if (visited.includes(bubble) || bubble.color !== color || bubble.isWall) {
-      if (bubble.isWall) {
-        console.log(`[DEV] 🔍 벽 블록 제외: ID=${bubble.id}`)
-      } else if (bubble.color !== color) {
-        console.log(`[DEV] 🔍 색상 불일치 제외: ID=${bubble.id}, 기대="${color}", 실제="${bubble.color}"`)
-      }
       return []
     }
     
@@ -1407,8 +1158,6 @@ export default function BubbleShooter() {
     
     const state = gameStateRef.current
     const bubblePos = getBubbleRenderPosition(bubble)
-    
-    console.log(`[DEV] 🔍 매칭 탐색: ID=${bubble.id}, 색상="${bubble.color}", 위치=(${bubble.gridRow}, ${bubble.gridCol})`)
     
     for (let other of state.bubbles) {
       if (other === bubble || visited.includes(other) || other.isWall) continue
@@ -1421,10 +1170,7 @@ export default function BubbleShooter() {
       
       // 인접 거리 기준 (2.5배)
       if (distance < BUBBLE_RADIUS * 2.5 && other.color === color) {
-        console.log(`[DEV] 🔍   인접 매칭 발견: ID=${other.id}, 거리=${distance.toFixed(1)}, 색상="${other.color}"`)
         matches = matches.concat(findMatches(other, color, visited))
-      } else if (distance < BUBBLE_RADIUS * 2.5) {
-        console.log(`[DEV] 🔍   인접하지만 색상 다름: ID=${other.id}, 거리=${distance.toFixed(1)}, 색상="${other.color}" vs "${color}"`)
       }
     }
     
@@ -1435,31 +1181,20 @@ export default function BubbleShooter() {
     const state = gameStateRef.current
     
     // ⚠️ 중요: 이 함수는 버블 매칭 시에만 호출되어야 함 (벽 하강과 분리)
-    console.log('[DEV] 🌊 떠있는 버블 제거 시작 (매칭 후에만 실행)')
-    console.log(`[DEV] 🌊 제거 전 버블 수: ${state.bubbles.length}개`)
     
     // 떠있는 버블 제거 전 스냅샷
-    const beforeSnapshot = createBubbleSnapshot(state.bubbles, '떠있는 버블 제거 전')
+    const beforeSnapshot = createBubbleSnapshot(state.bubbles)
     
     const connected: Bubble[] = []
     
     // 천장에 연결된 버블들 찾기 (단순하게 gridRow 0 이하)
-    console.log(`[DEV] 🌊 천장 연결 버블 탐색 시작`)
     for (let bubble of state.bubbles) {
       if (bubble.gridRow <= 0) {  // 0행 이하는 천장에 연결
-        console.log(`[DEV] 🌊   천장 연결: ID=${bubble.id}, 격자행=${bubble.gridRow}`)
         markConnected(bubble, connected)
       }
     }
     
-    console.log(`[DEV] 🌊 천장 연결된 버블: ${connected.length}개`)
-    
     const toRemove = state.bubbles.filter(bubble => !connected.includes(bubble))
-    
-    console.log(`[DEV] 🌊 떠있는 버블 발견: ${toRemove.length}개`)
-    toRemove.forEach(floating => {
-      console.log(`[DEV] 🌊   떠있음: ID=${floating.id}, 색상=${floating.color}, 격자행=${floating.gridRow}`)
-    })
     
     // 떨어지는 효과 생성
     if (toRemove.length > 0) {
@@ -1477,9 +1212,6 @@ export default function BubbleShooter() {
       // 제거된 버블 수 누적 (벽 블록 제외)
       const removedNormalBubbles = toRemove.filter(bubble => !bubble.isWall).length
       state.clearedBubbles += removedNormalBubbles
-      
-      console.log(`[DEV] 🌊 떠있는 버블로 제거된 일반 버블: ${removedNormalBubbles}개`)
-      console.log(`[DEV] 🌊 누적 제거된 버블: ${state.clearedBubbles}/${state.totalBubbles}개`)
     }
     
     for (let bubble of toRemove) {
@@ -1494,7 +1226,6 @@ export default function BubbleShooter() {
       setScore(prev => {
         const newScore = prev + bonusScore
         scoreRef.current = newScore // ref도 업데이트
-        console.log(`[DEV] 🌊 보너스 점수 업데이트: ${prev} → ${newScore} (+${bonusScore})`)
         
         // 게임 종료 조건 확인 (업데이트된 점수 전달)
         setTimeout(() => checkGameOver(newScore), 0)
@@ -1502,18 +1233,12 @@ export default function BubbleShooter() {
         return newScore
       })
       
-      console.log(`[DEV] 🌊 떠있는 버블 제거 완료: ${toRemove.length}개 제거됨`)
-      console.log(`[DEV] 🌊 제거된 버블 누적: ${state.clearedBubbles}/${state.totalBubbles}`)
-      
       // 떠있는 버블 제거 후 무결성 검증
-      validateBubbleIntegrity(beforeSnapshot || [], state.bubbles, '떠있는 버블 제거')
+      validateBubbleIntegrity(beforeSnapshot || [], state.bubbles)
     } else {
-      console.log('[DEV] 🌊 떠있는 버블 없음 - 모든 버블이 천장에 연결됨')
       // 떠있는 버블이 없어도 게임 종료 조건 확인
       setTimeout(() => checkGameOver(scoreRef.current), 0)
     }
-    
-    console.log(`[DEV] 🌊 제거 후 버블 수: ${state.bubbles.length}개`)
   }
 
   const markConnected = (bubble: Bubble, connected: Bubble[]) => {
@@ -1545,22 +1270,17 @@ export default function BubbleShooter() {
     // 기존 타이머들 정리 (중복 방지)
     if (state.wallTimer) {
       clearInterval(state.wallTimer)
-      console.log('[DEV] 기존 벽 타이머 정리됨')
     }
     if (state.countdownTimer) {
       clearInterval(state.countdownTimer)
-      console.log('[DEV] 기존 카운트다운 타이머 정리됨')
     }
     
     // 벽 하강 타이머 (30초마다)
     state.wallTimer = setInterval(() => {
       // 게임이 실행 중이 아니면 스킵
       if (!gameRunning || gameOver) {
-        console.log('[DEV] ⚠️ 게임이 실행 중이 아님 - 벽 하강 스킵')
         return
       }
-      
-      console.log('[DEV] 🕐 30초 경과 - 벽 하강 즉시 실행')
       
       // 애니메이션 없이 즉시 벽 하강 실행
       pushWallDown()
@@ -1580,8 +1300,6 @@ export default function BubbleShooter() {
         })
       }
     }, 1000)
-    
-    console.log('[DEV] 벽 하강 타이머 시작됨 (30초 간격)')
   }
 
 
@@ -1591,19 +1309,14 @@ export default function BubbleShooter() {
     
     // 이미 애니메이션 중이면 무시
     if (state.wallDescentAnimation.isAnimating) {
-      console.log('[DEV] 🧱 구름 벽 애니메이션이 이미 진행 중 - 스킵')
       return
     }
-    
-    console.log(`[DEV] 🧱 구름 벽 하강 시작`)
-    console.log(`[DEV] 🧱 하강 전 상태: 드러난 높이=${state.cloudWall.revealedHeight}px`)
     
     // 구름 벽이 처음 나타나는 경우
     if (!state.cloudWall.isVisible) {
       state.cloudWall.isVisible = true
       state.cloudWall.revealedHeight = 0
       state.cloudWall.stepCount = 0
-      console.log('[DEV] 🧱 구름 벽 첫 등장 - 이미지 아래쪽부터 드러나기 시작')
     }
     
     // 애니메이션 설정 (한 칸씩 더 드러나기)
@@ -1619,9 +1332,6 @@ export default function BubbleShooter() {
     
     // 단계 수 증가
     state.cloudWall.stepCount += 1
-    
-    console.log(`[DEV] 🧱 애니메이션 설정: 높이 ${state.wallDescentAnimation.startHeight}px → ${state.wallDescentAnimation.targetHeight}px`)
-    console.log(`[DEV] 🧱 단계: ${state.cloudWall.stepCount}단계, 최대 높이: ${state.cloudWall.maxHeight}px`)
     
     // 기존 벽 블록 시스템도 유지 (충돌 판정용)
     state.boardOffsetRows += 1
@@ -1647,9 +1357,6 @@ export default function BubbleShooter() {
         addedCount++
       }
     }
-    
-    console.log(`[DEV] 🧱 새 벽 블록 추가 완료: ${addedCount}개 (충돌 판정용)`)
-    console.log(`[DEV] 🧱 구름 벽 드러나기 애니메이션 시작됨 - 0.25초 후 완료 예정`)
   }
 
 
@@ -1659,7 +1366,6 @@ export default function BubbleShooter() {
     
     // 구름 벽이 게임오버 라인에 도달했는지 체크
     if (state.cloudWall.isVisible && state.cloudWall.revealedHeight >= SHOOTER_LINE_Y) {
-      console.log(`[DEV] 🎯 게임오버 감지: 구름 벽 높이=${Math.round(state.cloudWall.revealedHeight)}, 구슬라인Y=${SHOOTER_LINE_Y}`)
       triggerGameOver(currentScore)
       return
     }
@@ -1671,14 +1377,12 @@ export default function BubbleShooter() {
       
       // 픽셀 좌표 기준: 버블 하단이 구슬라인에 닿거나 넘으면 게임오버
       if (bubbleBottomY >= SHOOTER_LINE_Y) {
-        console.log(`[DEV] 🎯 게임오버 감지: 버블 ID=${bubble.id}, 하단Y=${Math.round(bubbleBottomY)}, 구슬라인Y=${SHOOTER_LINE_Y}`)
         triggerGameOver(currentScore)
         return
       }
       
       // 격자 좌표 기준: 버블 행이 구슬라인 행에 닿거나 넘으면 게임오버
       if (bubble.gridRow >= SHOOTER_LINE_ROW) {
-        console.log(`[DEV] 🎯 게임오버 감지: 버블 ID=${bubble.id}, 격자행=${bubble.gridRow}, 구슬라인행=${SHOOTER_LINE_ROW}`)
         triggerGameOver(currentScore)
         return
       }
@@ -1687,7 +1391,6 @@ export default function BubbleShooter() {
     // 일반 버블(벽 블록 제외)이 모두 제거되면 승리
     const normalBubbles = state.bubbles.filter(bubble => !bubble.isWall)
     if (normalBubbles.length === 0) {
-      console.log(`[DEV] 🎯 승리 조건 달성: 모든 일반 버블 제거됨 (벽 블록 제외)`)
       triggerVictory(currentScore)
     }
   }
@@ -1701,12 +1404,6 @@ export default function BubbleShooter() {
     // 별 계산 (클리어 비율과 점수를 모두 고려)
     const clearRatio = state.totalBubbles > 0 ? state.clearedBubbles / state.totalBubbles : 0
     let starCount = 0
-    
-    console.log(`[DEV] 🌟 별 계산 디버깅:`)
-    console.log(`[DEV] 🌟   총 버블 수: ${state.totalBubbles}개`)
-    console.log(`[DEV] 🌟   제거된 버블 수: ${state.clearedBubbles}개`)
-    console.log(`[DEV] 🌟   클리어 비율: ${(clearRatio * 100).toFixed(1)}%`)
-    console.log(`[DEV] 🌟   현재 점수: ${currentScore}`)
     
     // 점수 기준 별 계산
     let scoreStars = 0
@@ -1729,13 +1426,6 @@ export default function BubbleShooter() {
     // 두 기준 중 높은 것을 선택 (하지만 최대 2개까지)
     starCount = Math.min(2, Math.max(scoreStars, clearStars))
     
-    console.log(`[DEV] 🌟   점수 기준 별: ${scoreStars}개`)
-    console.log(`[DEV] 🌟   클리어 기준 별: ${clearStars}개`)
-    console.log(`[DEV] 🌟   최종 결과: 별 ${starCount}개`)
-    
-    console.log(`[DEV] 🎮 게임오버 - 원래 구슬: ${state.totalBubbles}개, 깬 구슬: ${state.clearedBubbles}개, 비율: ${(clearRatio * 100).toFixed(1)}%, 별: ${starCount}개`)
-    console.log(`[DEV] 🎮 현재 점수: ${currentScore}`)
-    
     // 엔딩 결과 설정
     setGameResult({
       isClear: false,
@@ -1754,8 +1444,6 @@ export default function BubbleShooter() {
       clearInterval(state.countdownTimer)
       state.countdownTimer = null
     }
-    
-    console.log('[DEV] 게임오버 - 모든 상태 초기화됨')
   }
 
   const triggerVictory = (currentScore: number = scoreRef.current) => {
@@ -1764,10 +1452,7 @@ export default function BubbleShooter() {
     setGameRunning(false)
     // 승리 시에는 gameOver를 false로 유지 (승리 상태 구분)
     
-    console.log(`[DEV] 🎮 승리! - 모든 원래 구슬 제거됨 (${state.totalBubbles}개 중 ${state.clearedBubbles}개), 별: 3개`)
-    console.log(`[DEV] 🎮 현재 점수: ${currentScore}`)
-    
-    // 엔딩 결과 설정 (클리어 시 무조건 별 3개)
+    // sol결과 설정 (클리어 시 무조건 별 3개)
     setGameResult({
       isClear: true,
       starCount: 3,
@@ -1785,8 +1470,6 @@ export default function BubbleShooter() {
       clearInterval(state.countdownTimer)
       state.countdownTimer = null
     }
-    
-    console.log('[DEV] 승리 - 모든 상태 초기화됨')
   }
 
   const draw = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
@@ -1870,7 +1553,6 @@ export default function BubbleShooter() {
     
     // cloud2 이미지가 로드되었는지 확인
     if (!state.cloud2Image || !state.endingImagesLoaded) {
-      console.log('[DEV] 🌫️ 구름2 이미지 미로드, 기본 구름 벽 사용')
       drawDefaultCloudWall(ctx, canvas)
       return
     }
@@ -1901,10 +1583,6 @@ export default function BubbleShooter() {
     // 화면 상단에 그리기
     const destY = 0
     const destHeight = revealedHeight
-    
-    console.log(`[DEV] 🌤️ 구름 벽 일부 그리기: 드러난높이=${revealedHeight.toFixed(1)}px`)
-    console.log(`[DEV] 🌤️   소스: Y=${sourceY.toFixed(1)}, H=${sourceHeight.toFixed(1)}`)
-    console.log(`[DEV] 🌤️   대상: Y=${destY}, H=${destHeight.toFixed(1)}`)
     
     // 이미지의 아래쪽 일부를 화면 상단에 그리기
     ctx.drawImage(
@@ -1999,99 +1677,6 @@ export default function BubbleShooter() {
     ctx.strokeStyle = lightenColor(color, 0.2)
     ctx.lineWidth = 0.8
     ctx.stroke()
-  }
-
-  const drawScrollingBackground = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-    const state = gameStateRef.current
-    
-    // cloud2 이미지가 로드되었는지 확인
-    if (!state.cloud2Image || !state.endingImagesLoaded) {
-      console.log('[DEV] 🌫️ 구름2 이미지 미로드, 기본 배경 사용')
-      drawDefaultScrollingBackground(ctx, canvas)
-      return
-    }
-    
-    // 전체 화면을 덮을 수 있는 큰 배경 그리기
-    const canvasWidth = canvas.width
-    const canvasHeight = canvas.height
-    
-    // 이미지의 원본 크기
-    const imageWidth = state.cloud2Image.width
-    const imageHeight = state.cloud2Image.height
-    
-    // 화면을 완전히 덮기 위한 스케일 계산
-    const scaleX = canvasWidth / imageWidth
-    const scaleY = canvasHeight / imageHeight
-    const scale = Math.max(scaleX, scaleY) // 화면을 완전히 덮도록
-    
-    const scaledWidth = imageWidth * scale
-    const scaledHeight = imageHeight * scale
-    
-    // 스크롤 오프셋 적용 (애니메이션 중에는 backgroundScrollY 사용)
-    const totalScrollY = (state.boardOffsetRows * CELL_HEIGHT) + state.backgroundScrollY
-    
-    // 이미지를 반복해서 그리기 (무한 스크롤 효과)
-    const repeatY = scaledHeight
-    const startY = -(totalScrollY % repeatY)
-    
-    console.log(`[DEV] 🌤️ 스크롤링 배경 그리기: 스크롤Y=${totalScrollY.toFixed(1)}, 시작Y=${startY.toFixed(1)}`)
-    
-    // 화면을 덮을 만큼 이미지를 반복 그리기
-    for (let y = startY; y < canvasHeight + repeatY; y += repeatY) {
-      ctx.drawImage(
-        state.cloud2Image,
-        0, y,
-        scaledWidth, scaledHeight
-      )
-    }
-  }
-  
-  const drawDefaultScrollingBackground = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-    const state = gameStateRef.current
-    
-    // 기본 그라데이션 배경
-    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height)
-    gradient.addColorStop(0, '#8a8a8a')
-    gradient.addColorStop(0.3, '#6a6a6a')
-    gradient.addColorStop(0.7, '#4a4a4a')
-    gradient.addColorStop(1, '#3a3a3a')
-    
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-  }
-
-  const drawWallRow = (ctx: CanvasRenderingContext2D, renderRow: number) => {
-    const state = gameStateRef.current
-    const y = renderRow * CELL_HEIGHT + BUBBLE_RADIUS
-    const height = CELL_HEIGHT * 2 // 높이를 2배로 늘림
-    const width = 500 // 전체 캔버스 너비
-    
-    // cloud2 이미지가 로드되었으면 이미지 사용, 아니면 기본 회색 배경
-    if (state.cloud2Image && state.endingImagesLoaded) {
-      // cloud2 이미지를 전체 너비로 늘려서 그리기
-      ctx.drawImage(
-        state.cloud2Image,
-        0, y - height/2,
-        width, height // 전체 너비와 늘어난 높이로 그리기
-      )
-      
-      console.log(`[DEV] 🌤️ 구름2 이미지 늘려서 그리기: 위치 y=${y}, 크기=${width}x${height}`)
-    } else {
-      console.log('[DEV] 🌫️ 구름2 이미지 미로드, 기본 벽 사용')
-      drawDefaultWall(ctx, y, height, width)
-    }
-  }
-  
-  const drawDefaultWall = (ctx: CanvasRenderingContext2D, y: number, height: number, width: number) => {
-    // 기본 회색 그라데이션 배경
-    const gradient = ctx.createLinearGradient(0, y - height/2, 0, y + height/2)
-    gradient.addColorStop(0, '#8a8a8a')
-    gradient.addColorStop(0.3, '#6a6a6a')
-    gradient.addColorStop(0.7, '#4a4a4a')
-    gradient.addColorStop(1, '#3a3a3a')
-    
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, y - height/2, width, height)
   }
 
   const darkenColor = (color: string, factor: number) => {
@@ -2296,11 +1881,9 @@ export default function BubbleShooter() {
               zIndex: -1
             }}
             onError={(e) => {
-              console.log('이미지 로드 실패:', e);
               e.currentTarget.style.display = 'none';
             }}
             onLoad={() => {
-              console.log('이미지 로드 성공');
             }}
           />
           
