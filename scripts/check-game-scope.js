@@ -40,20 +40,7 @@ if (changedFiles.length === 0) {
   process.exit(0)
 }
 
-const invalidFiles = changedFiles.filter((file) => {
-  // Allow changes in src/games/ folder
-  if (file.startsWith('src/games/')) return false
-  
-  // Allow changes in public/assets/<game-id>/ folder for game assets
-  if (file.startsWith('public/assets/') && file.split('/').length >= 4) {
-    const gameId = file.split('/')[2] // Extract game-id from public/assets/<game-id>/
-    // Check if this game-id exists in src/games/
-    const hasCorrespondingGame = changedFiles.some(f => f.startsWith(`src/games/${gameId}/`))
-    if (hasCorrespondingGame) return false
-  }
-  
-  return true
-})
+const invalidFiles = changedFiles.filter((file) => !file.startsWith('src/games/'))
 
 if (invalidFiles.length > 0) {
   process.stderr.write(
