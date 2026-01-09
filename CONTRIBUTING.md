@@ -66,7 +66,7 @@ Shared utilities can go in `src/games/shared/` if needed by multiple games.
 Add `game.ts` metadata for the hub auto-listing.
 Do not edit global UI files, hub layout, or `src/games/registry.ts`.
 Cloudscape rules are for the hub only; inside the game you can use any style.
-If adding test dependencies or TypeScript config, modify relevant files and explain in PR.
+If adding test dependencies, TypeScript config, or deployment config, modify relevant files and explain in PR.
 ```
 
 ## Directory structure
@@ -159,6 +159,27 @@ Include a clear explanation in your PR description.
 - Prefer extending existing config over replacing it
 - Document why the change is necessary for your game
 
+## Deployment configuration changes
+
+If your game requires specific deployment settings, you may modify:
+
+**Deployment platforms:**
+- `vercel.json` - Vercel deployment configuration
+- `netlify.toml` - Netlify deployment configuration
+- `.env.example` - Example environment variables
+
+**Common use cases:**
+- Custom routing rules for your game
+- Headers (CORS, caching, security)
+- Redirects or rewrites
+- Environment variable documentation
+
+**⚠️ Important:**
+- These changes affect production deployment
+- Will require careful maintainer review
+- Test thoroughly before submitting PR
+- Document the reason for changes clearly
+
 ## PR checklist
 
 - [ ] Game code lives in `src/games/<game-id>/`
@@ -168,6 +189,7 @@ Include a clear explanation in your PR description.
 - [ ] No edits to global layout files or `src/games/registry.ts`
 - [ ] If test infrastructure changed, explanation provided
 - [ ] If TypeScript config changed, explanation provided
+- [ ] If deployment config changed, explanation and testing proof provided
 - [ ] Demo media included in PR description
 
 ## Maintainer override

@@ -38,6 +38,7 @@ if (changedFiles.length === 0) {
 // 3. src/games/shared/ - shared utilities (if exists)
 // 4. Test infrastructure files (with warning)
 // 5. Documentation files (with warning)
+// 6. Deployment configuration files (with warning)
 const allowedTestInfraFiles = [
   'package.json',
   'package-lock.json',
@@ -52,6 +53,12 @@ const allowedTestInfraFiles = [
 const allowedDocFiles = [
   'src/games/README.md',
   'README.md',
+]
+
+const allowedDeploymentFiles = [
+  'vercel.json',
+  'netlify.toml',
+  '.env.example',
 ]
 
 const invalidFiles = changedFiles.filter((file) => {
@@ -70,6 +77,9 @@ const invalidFiles = changedFiles.filter((file) => {
   
   // Allow documentation files
   if (allowedDocFiles.includes(file)) return false
+  
+  // Allow deployment configuration files
+  if (allowedDeploymentFiles.includes(file)) return false
   
   return true
 })
@@ -97,6 +107,15 @@ if (docChanges.length > 0) {
     `📝 Documentation files modified:\n${docChanges.map((file) => `- ${file}`).join('\n')}\n`,
   )
   process.stdout.write('Please ensure changes improve clarity and accuracy.\n\n')
+}
+
+// Warn about deployment configuration changes
+const deploymentChanges = changedFiles.filter((file) => allowedDeploymentFiles.includes(file))
+if (deploymentChanges.length > 0) {
+  process.stdout.write(
+    `🚀 Deployment configuration files modified:\n${deploymentChanges.map((file) => `- ${file}`).join('\n')}\n`,
+  )
+  process.stdout.write('These changes affect production deployment and require careful review.\n\n')
 }
 
 const shallowFiles = changedFiles.filter((file) => {
@@ -154,8 +173,9 @@ if (gameIds.size === 0) {
   const hasSharedChanges = changedFiles.some((file) => file.startsWith('src/games/shared/'))
   const hasDocChanges = changedFiles.some((file) => allowedDocFiles.includes(file))
   const hasInfraChanges = changedFiles.some((file) => allowedTestInfraFiles.includes(file))
+  const hasDeploymentChanges = changedFiles.some((file) => allowedDeploymentFiles.includes(file))
   
-  if (hasSharedChanges || hasDocChanges || hasInfraChanges) {
+  if (hasSharedChanges || hasDocChanges || hasInfraChanges || hasDeploymentChanges) {
     process.stdout.write('Game scope check passed (infrastructure/shared changes only).\n')
     process.exit(0)
   }
