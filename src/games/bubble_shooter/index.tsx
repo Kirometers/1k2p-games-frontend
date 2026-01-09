@@ -6,6 +6,7 @@ import gameclearBgImage from './gameclear.png'
 import gameoverKiroImage from './gameover_kiro.png'
 import gameoverBgImage from './gameover.png'
 import startBgImage from './start.png'
+import backgroundImage from './background.png'
 
 // 게임 상수
 const WALL_DESCENT_INTERVAL_MS = 30000  // 30초
@@ -2052,7 +2053,9 @@ export default function BubbleShooter() {
 
   return (
     <div style={{ 
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: gameState === 'playing' 
+        ? `url(${backgroundImage}) center/cover no-repeat` 
+        : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       minHeight: '100vh',
       display: 'flex',
       justifyContent: 'center',
@@ -2073,7 +2076,7 @@ export default function BubbleShooter() {
           justifyContent: 'center',
           alignItems: 'center',
           zIndex: 1000,
-          background: '#000'
+          background: 'transparent'
         }}>
           {/* 이미지를 img 태그로 직접 표시 */}
           <img 
