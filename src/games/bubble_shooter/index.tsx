@@ -9,6 +9,21 @@ import startBgImage from './start.png'
 import backgroundImage from './background.png'
 import cloudImage from './cloud.png'
 import cloud2Image from './cloud2.png'
+import popSoundFile from './pop.wav'
+
+// 사운드 파일들 import
+const popSound = new Audio(popSoundFile)
+
+// 사운드 재생 함수
+const playPopSound = () => {
+  try {
+    popSound.currentTime = 0 // 사운드를 처음부터 재생
+    popSound.volume = 0.4 // 볼륨 조절
+    popSound.play().catch(e => console.log('Pop sound play failed:', e))
+  } catch (e) {
+    console.log('Pop sound error:', e)
+  }
+}
 
 // 게임 상수
 const WALL_DESCENT_INTERVAL_MS = 30000  // 30초
@@ -1297,6 +1312,9 @@ export default function BubbleShooter() {
       const state = gameStateRef.current
       
       console.log(`[DEV] ✅ 매칭 성공! ${matches.length}개 버블 제거 시작`)
+      
+      // 버블 터지는 사운드 재생
+      playPopSound()
       
       // 키로 모션 트리거 (버블 개수에 따라 다른 모션)
       if (matches.length >= 8) {
