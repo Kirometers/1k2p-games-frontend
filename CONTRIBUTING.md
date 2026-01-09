@@ -22,6 +22,7 @@ These rules keep the Cloudscape look intact and prevent cross-team conflicts.
 
 2. Only touch your game folder
    - Put your work under `src/games/<game-id>/`.
+   - For static assets (images, audio, etc.), use `public/games/<game-id>/`.
    - Do not modify other games or shared UI unless requested.
    - CI will fail if files outside your game folder are changed.
 
@@ -58,15 +59,16 @@ Paste this when asking an AI to work on a mini game:
 
 ```
 Follow `CONTRIBUTING.md` and `src/games/README.md`.
-Work only inside `src/games/<game-id>/`.
+Work only inside `src/games/<game-id>/` and `public/games/<game-id>/`.
 Add `game.ts` metadata for the hub auto-listing.
 Do not edit global UI files or the hub layout.
 Cloudscape rules are for the hub only; inside the game you can use any style.
+If adding test dependencies, modify package.json and explain in PR.
 ```
 
 ## Directory structure
 
-Each game has its own folder under `src/games/`:
+Each game has its own folder under `src/games/` for code and `public/games/` for static assets:
 
 ```
 src/games/<game-id>/
@@ -74,11 +76,29 @@ src/games/<game-id>/
   README.md
   index.tsx
   styles.css
-  assets/
+  assets/           # Small assets bundled with code
+
+public/games/<game-id>/
+  images/           # Large images, sprites
+  audio/            # Sound effects, music
+  data/             # JSON, CSV, or other data files
 ```
 
 `src/games/registry.ts` auto-loads each game's `game.ts`. The hub routes
 `/games/<game-id>` directly to your `index.tsx` component.
+
+### When to use `src/games/<game-id>/assets/` vs `public/games/<game-id>/`
+
+- **`src/games/<game-id>/assets/`**: Small assets that should be bundled (< 100KB)
+  - Icons, small images
+  - Will be processed by Vite and get cache-busting hashes
+  - Import with: `import myImage from './assets/image.png'`
+
+- **`public/games/<game-id>/`**: Large static files served as-is
+  - Large images, spritesheets
+  - Audio files, videos
+  - Data files (JSON, CSV)
+  - Access with: `/games/<game-id>/images/sprite.png`
 
 ## Game integration expectations
 
@@ -86,11 +106,22 @@ src/games/<game-id>/
 - If you need styles, scope them to your game folder only.
 - You can use any UI stack or style inside your game folder.
 
+## Test infrastructure changes
+
+If your game requires testing dependencies (vitest, jest, etc.), you may modify:
+- `package.json` / `package-lock.json` - Add dev dependencies only
+- `vite.config.ts` / `vitest.config.ts` - Add test configuration
+
+These changes will be flagged for maintainer review but are allowed if justified.
+Include a clear explanation in your PR description.
+
 ## PR checklist
 
 - [ ] Game code lives in `src/games/<game-id>/`
+- [ ] Static assets (if any) in `public/games/<game-id>/`
 - [ ] `game.ts` metadata added
 - [ ] No edits to global layout files (unless explicitly approved)
+- [ ] If test infrastructure changed, explanation provided
 - [ ] Demo media included in PR description
 
 ## Maintainer override
