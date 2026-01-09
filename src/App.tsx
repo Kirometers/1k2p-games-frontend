@@ -22,6 +22,7 @@ import {
   type GameStatus,
   type Locale,
 } from './games/registry'
+import { AdBanner } from './components/AdBanner'
 
 const statusMap: Record<GameStatus, 'success' | 'info' | 'pending'> = {
   open: 'success',
@@ -147,7 +148,8 @@ const copy = {
   },
 } as const
 
-type Copy = (typeof copy)['en']
+const placeholderImage =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0%" stop-color="%23dbeafe"/><stop offset="100%" stop-color="%2393c5fd"/></linearGradient></defs><rect width="320" height="320" rx="28" fill="url(%23g)"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Open Sans, Arial, sans-serif" font-size="48" fill="%231e293b">1k2p</text></svg>'
 
 function App() {
   const [navigationOpen, setNavigationOpen] = useState(false)
@@ -193,12 +195,12 @@ function App() {
               onItemClick: ({ detail }) => setLocale(detail.id as Locale),
             },
             {
-              type: 'link',
+              type: 'button',
               text: t.navSubmit,
               href: '/#creators',
             },
             {
-              type: 'link',
+              type: 'button',
               text: t.navGuide,
               href: '/#creators',
             },
@@ -241,7 +243,7 @@ type PageProps = {
   navigationOpen: boolean
   onNavigationChange: (open: boolean) => void
   locale: Locale
-  t: Copy
+  t: typeof copy.en | typeof copy.ko
 }
 
 function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: PageProps) {
@@ -291,25 +293,95 @@ function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: 
           }
         >
           <SpaceBetween size="l">
+            {/* 상단 배너 광고 */}
+            <AdBanner adSlot="1234567890" adFormat="horizontal" />
+
             <Container
               header={<Header variant="h2" description={t.cardsDescription}>{t.cardsTitle}</Header>}
             >
               <Cards
                 cardDefinition={{
-                  header: (item) => resolveLocaleString(item.title, locale),
+                  header: (item) => {
+                    const imageSrc = item.thumbnail ?? placeholderImage
+                    const title = resolveLocaleString(item.title, locale)
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: 8,
+                            overflow: 'hidden',
+                            border: '1px solid var(--awsui-color-border-divider-default)',
+                            background: 'var(--awsui-color-background-layout-main)',
+                            flex: '0 0 40px',
+                          }}
+                        >
+                          <img
+                            src={imageSrc}
+                            alt={title}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </div>
+                        <Box variant="h3">{title}</Box>
+                      </div>
+                    )
+                  },
                   sections: [
                     {
-                      id: 'mode',
-                      header: t.cardsMode,
-                      content: (item) => resolveLocaleString(item.mode, locale),
+                      id: 'hero',
+                      content: (item) => {
+                        const heroSrc = item.heroImage ?? item.thumbnail ?? placeholderImage
+                        const title = resolveLocaleString(item.title, locale)
+                        return (
+                          <div
+                            style={{
+                              width: '100%',
+                              aspectRatio: '16 / 9',
+                              borderRadius: 12,
+                              overflow: 'hidden',
+                              border: '1px solid var(--awsui-color-border-divider-default)',
+                              background: 'var(--awsui-color-background-layout-main)',
+                            }}
+                          >
+                            <img
+                              src={heroSrc}
+                              alt={title}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          </div>
+                        )
+                      },
                     },
                     {
-                      id: 'status',
-                      header: t.cardsStatus,
+                      id: 'meta',
                       content: (item) => (
-                        <StatusIndicator type={statusMap[item.status] ?? 'info'}>
-                          {statusLabels[locale][item.status]}
-                        </StatusIndicator>
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '16px',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <div style={{ width: '50%', minWidth: 0 }}>
+                            <SpaceBetween size="xs">
+                              <Box variant="small" color="text-body-secondary">
+                                {t.cardsMode}
+                              </Box>
+                              <Box>{resolveLocaleString(item.mode, locale)}</Box>
+                            </SpaceBetween>
+                          </div>
+                          <div style={{ width: '50%', minWidth: 0 }}>
+                            <SpaceBetween size="xs">
+                              <Box variant="small" color="text-body-secondary">
+                                {t.cardsStatus}
+                              </Box>
+                              <StatusIndicator type={statusMap[item.status] ?? 'info'}>
+                                {statusLabels[locale][item.status]}
+                              </StatusIndicator>
+                            </SpaceBetween>
+                          </div>
+                        </div>
                       ),
                     },
                     {
@@ -338,6 +410,9 @@ function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: 
                 }
               />
             </Container>
+
+            {/* 중간 배너 광고 */}
+            <AdBanner adSlot="0987654321" adFormat="auto" />
 
             <Container id="creators" header={<Header variant="h2">{t.creatorsTitle}</Header>}>
               <SpaceBetween size="l">
@@ -369,13 +444,16 @@ function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: 
             <Container id="roadmap" header={<Header variant="h2">{t.roadmapTitle}</Header>}>
               <SpaceBetween size="s">
                 <Box variant="h3">{t.roadmapSubtitle}</Box>
-                <Box component="ul" padding={{ left: 'l' }}>
+                <ul style={{ paddingLeft: '24px', margin: 0 }}>
                   {t.roadmapItems.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
-                </Box>
+                </ul>
               </SpaceBetween>
             </Container>
+
+            {/* 하단 배너 광고 */}
+            <AdBanner adSlot="1122334455" adFormat="horizontal" />
           </SpaceBetween>
         </ContentLayout>
       }
@@ -410,21 +488,29 @@ function GamePage({ navigation, navigationOpen, onNavigationChange, locale, t }:
             </SpaceBetween>
           }
         >
-          <Container>
-            {game && GameComponent ? (
-              <Suspense
-                fallback={
-                  <StatusIndicator type="loading">{t.loadingGame}</StatusIndicator>
-                }
-              >
-                <GameComponent />
-              </Suspense>
-            ) : (
-              <Box color="text-body-secondary">
-                {t.missingGameEntry} <code>src/games/{gameId}/index.tsx</code>.
-              </Box>
-            )}
-          </Container>
+          <SpaceBetween size="l">
+            {/* 게임 페이지 상단 광고 */}
+            <AdBanner adSlot="5544332211" adFormat="horizontal" />
+
+            <Container>
+              {game && GameComponent ? (
+                <Suspense
+                  fallback={
+                    <StatusIndicator type="loading">{t.loadingGame}</StatusIndicator>
+                  }
+                >
+                  <GameComponent />
+                </Suspense>
+              ) : (
+                <Box color="text-body-secondary">
+                  {t.missingGameEntry} <code>src/games/{gameId}/index.tsx</code>.
+                </Box>
+              )}
+            </Container>
+
+            {/* 게임 페이지 하단 광고 */}
+            <AdBanner adSlot="6677889900" adFormat="horizontal" />
+          </SpaceBetween>
         </ContentLayout>
       }
       toolsHide

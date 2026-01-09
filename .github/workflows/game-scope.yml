@@ -17,5 +17,30 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Check if scope check should be skipped
+        id: check-skip
+        run: |
+          # Skip for release PRs (develop → main)
+          if [[ "${{ github.base_ref }}" == "main" ]]; then
+            echo "should_skip=true" >> $GITHUB_OUTPUT
+            echo "reason=Release PR (develop → main)" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Apply scope check ONLY for game development branches (game/*)
+          BRANCH_NAME="${{ github.head_ref }}"
+          if [[ "$BRANCH_NAME" =~ ^game/ ]]; then
+            echo "should_skip=false" >> $GITHUB_OUTPUT
+            echo "reason=Game development branch" >> $GITHUB_OUTPUT
+          else
+            echo "should_skip=true" >> $GITHUB_OUTPUT
+            echo "reason=Infrastructure/UI branch (not game/*)" >> $GITHUB_OUTPUT
+          fi
+
       - name: Verify game scope
+        if: steps.check-skip.outputs.should_skip != 'true'
         run: node scripts/check-game-scope.js
+
+      - name: Skip check
+        if: steps.check-skip.outputs.should_skip == 'true'
+        run: echo "✓ Skipping game scope check - ${{ steps.check-skip.outputs.reason }}"

@@ -15,14 +15,24 @@ auto-load it.
 
 These rules keep the Cloudscape look intact and prevent cross-team conflicts.
 
-1. Do not change global UI layout or styling
+**Branch naming conventions:**
+- `game/*` - Game development (scope check **applies**)
+  - Example: `game/space-invaders`, `game/tetris-clone`
+- Anything else - Infrastructure/UI/Core development (scope check **skipped**)
+  - Example: `feature/new-ui`, `fix/routing-bug`, `chore/update-deps`
+
+1. Do not change global UI layout or styling (for game development)
    - Avoid edits to `src/App.tsx`, `src/main.tsx`, and `src/index.css`.
    - Do not add global CSS resets or site-wide styles.
    - Use Cloudscape components and design tokens instead of custom CSS themes.
+   - **Exception:** Non-game branches can freely modify these files.
 
 2. Only touch your game folder
    - Put your work under `src/games/<game-id>/`.
+   - For static assets (images, audio, etc.), use `public/games/<game-id>/`.
+   - Shared utilities can go in `src/games/shared/` (use sparingly).
    - Do not modify other games or shared UI unless requested.
+   - Do not modify `src/games/registry.ts` (core infrastructure).
    - CI will fail if files outside your game folder are changed.
 
 3. Register your game in the hub
@@ -30,11 +40,16 @@ These rules keep the Cloudscape look intact and prevent cross-team conflicts.
    - Export a default object that matches `GameMeta`.
    - Keep `id` stable and URL-safe (kebab-case).
    - Keep `status` to one of: `open`, `prototype`, `planned`.
+   - Add `thumbnail` to show a square image on the hub cards (optional, 1:1).
+     - Recommended size: 256x256 or larger (min 128x128).
+   - Add `heroImage` to show a wide image under the card header (optional, 16:9).
+     - Recommended size: 1280x720 or larger (min 960x540).
    - Export a default React component from `index.tsx` for the game route.
    - For hub text, prefer localized strings (`{ en, ko }`).
 
 4. Keep PRs reviewable
-   - One game per PR.
+   - One game per PR (for game contributions).
+   - Use appropriate branch naming (see above).
    - No unrelated refactors or dependency changes.
    - Include a short demo clip or screenshot in the PR description.
 
@@ -54,27 +69,69 @@ Paste this when asking an AI to work on a mini game:
 
 ```
 Follow `CONTRIBUTING.md` and `src/games/README.md`.
-Work only inside `src/games/<game-id>/`.
+Use branch name starting with 'game/' for game development.
+Work only inside `src/games/<game-id>/` and `public/games/<game-id>/`.
+Shared utilities can go in `src/games/shared/` if needed by multiple games.
 Add `game.ts` metadata for the hub auto-listing.
-Do not edit global UI files or the hub layout.
+Do not edit global UI files, hub layout, or `src/games/registry.ts`.
 Cloudscape rules are for the hub only; inside the game you can use any style.
+If adding test dependencies, TypeScript config, or deployment config, modify relevant files and explain in PR.
 ```
 
 ## Directory structure
 
-Each game has its own folder under `src/games/`:
+Each game has its own folder under `src/games/` for code and `public/games/` for static assets:
 
 ```
-src/games/<game-id>/
-  game.ts
-  README.md
-  index.tsx
-  styles.css
-  assets/
+src/games/
+  shared/           # Shared utilities (optional, use sparingly)
+    utils.ts
+    types.ts
+  <game-id>/
+    game.ts
+    README.md
+    index.tsx
+    styles.css
+    assets/         # Small assets bundled with code
+  registry.ts       # DO NOT MODIFY (auto-loads games)
+
+public/games/<game-id>/
+  images/           # Large images, sprites
+  audio/            # Sound effects, music
+  data/             # JSON, CSV, or other data files
 ```
 
 `src/games/registry.ts` auto-loads each game's `game.ts`. The hub routes
 `/games/<game-id>` directly to your `index.tsx` component.
+
+### Shared utilities (`src/games/shared/`)
+
+If multiple games need the same utility (e.g., random number generator, physics engine),
+you can add it to `src/games/shared/`. Use this sparingly to avoid coupling between games.
+
+Examples of good shared utilities:
+- Seeded random number generators
+- Common physics calculations
+- Shared TypeScript types
+- Reusable game hooks
+
+Examples of what NOT to share:
+- Game-specific logic
+- UI components (each game should be self-contained)
+- Large libraries (add to package.json instead)
+
+### When to use `src/games/<game-id>/assets/` vs `public/games/<game-id>/`
+
+- **`src/games/<game-id>/assets/`**: Small assets that should be bundled (< 100KB)
+  - Icons, small images
+  - Will be processed by Vite and get cache-busting hashes
+  - Import with: `import myImage from './assets/image.png'`
+
+- **`public/games/<game-id>/`**: Large static files served as-is
+  - Large images, spritesheets
+  - Audio files, videos
+  - Data files (JSON, CSV)
+  - Access with: `/games/<game-id>/images/sprite.png`
 
 ## Game integration expectations
 
@@ -82,14 +139,89 @@ src/games/<game-id>/
 - If you need styles, scope them to your game folder only.
 - You can use any UI stack or style inside your game folder.
 
+## Documentation improvements
+
+You are encouraged to improve documentation:
+- `src/games/README.md` - Game development guide
+- `README.md` - Project overview (if improving game-related sections)
+- Your game's `README.md` - Game-specific documentation
+
+Documentation PRs are welcome and will be reviewed quickly.
+
+If your game requires testing dependencies or configuration changes, you may modify:
+
+**Test frameworks:**
+- `package.json` / `package-lock.json` - Add dev dependencies only
+- `vite.config.ts` / `vitest.config.ts` - Vitest configuration
+- `jest.config.js` - Jest configuration
+- `playwright.config.ts` - E2E testing configuration
+
+**TypeScript configuration:**
+- `tsconfig.json` - Shared TypeScript settings
+- `tsconfig.app.json` - App-specific TypeScript settings
+
+These changes will be flagged for maintainer review but are allowed if justified.
+Include a clear explanation in your PR description.
+
+**Guidelines:**
+- Only add dev dependencies (not production dependencies)
+- Prefer extending existing config over replacing it
+- Document why the change is necessary for your game
+
+## Deployment configuration changes
+
+If your game requires specific deployment settings, you may modify:
+
+**Deployment platforms:**
+- `vercel.json` - Vercel deployment configuration
+- `netlify.toml` - Netlify deployment configuration
+- `.env.example` - Example environment variables
+
+**Common use cases:**
+- Custom routing rules for your game
+- Headers (CORS, caching, security)
+- Redirects or rewrites
+- Environment variable documentation
+
+**⚠️ Important:**
+- These changes affect production deployment
+- Will require careful maintainer review
+- Test thoroughly before submitting PR
+- Document the reason for changes clearly
+
 ## PR checklist
 
 - [ ] Game code lives in `src/games/<game-id>/`
+- [ ] Static assets (if any) in `public/games/<game-id>/`
+- [ ] Shared utilities (if any) in `src/games/shared/` with clear documentation
 - [ ] `game.ts` metadata added
-- [ ] No edits to global layout files (unless explicitly approved)
+- [ ] No edits to global layout files or `src/games/registry.ts`
+- [ ] If test infrastructure changed, explanation provided
+- [ ] If TypeScript config changed, explanation provided
+- [ ] If deployment config changed, explanation and testing proof provided
 - [ ] Demo media included in PR description
 
 ## Maintainer override
 
 If a core maintainer needs to edit shared files, set `BYPASS_GAME_SCOPE=true`
 in the CI job or run the check locally with that env var.
+
+## For maintainers: UI and infrastructure development
+
+If you're working on the hub UI, core infrastructure, or CI/CD:
+
+1. **Use any branch name EXCEPT `game/*`:**
+   - `feature/*` for new features
+   - `fix/*` for bug fixes
+   - `chore/*` for maintenance
+   - `docs/*` for documentation
+   - `refactor/*` for refactoring
+   - etc.
+
+2. **Game scope check will be automatically skipped** for non-game branches.
+
+3. **Still follow best practices:**
+   - Keep PRs focused and reviewable
+   - Test changes thoroughly
+   - Update documentation as needed
+   - Consider impact on existing games
