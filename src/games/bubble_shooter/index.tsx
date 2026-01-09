@@ -8,6 +8,7 @@ import gameoverBgImage from './gameover.png'
 import startBgImage from './start.png'
 import backgroundImage from './background.png'
 import cloudImage from './cloud.png'
+import cloud2Image from './cloud2.png'
 
 // 게임 상수
 const WALL_DESCENT_INTERVAL_MS = 30000  // 30초
@@ -146,7 +147,7 @@ export default function BubbleShooter() {
     trajectory: null as Trajectory | null,
     shooter: { x: 0, y: 0 },
     bubbleRadius: BUBBLE_RADIUS,
-    colors: ['#D1C4E9', '#FFCDD2', '#C8E6C9', '#BBDEFB', '#FFF9C4', '#E1BEE7', '#B2EBF2'],
+    colors: ['#FF69B4', '#FF6347', '#32CD32', '#1E90FF', '#FFD700', '#FF1493', '#00CED1'],
     rows: 8,
     cols: 12,
     wallTimer: null as number | null,
@@ -161,10 +162,26 @@ export default function BubbleShooter() {
     gameoverBgImage: null as HTMLImageElement | null,
     startBgImage: null as HTMLImageElement | null, // 시작 화면 배경 추가
     cloudImage: null as HTMLImageElement | null, // 구름 이미지 추가
+    cloud2Image: null as HTMLImageElement | null, // 구름2 이미지 추가 (부드러운 애니메이션용)
     endingImagesLoaded: false,
     // 애니메이션 상태
     popParticles: [] as PopParticle[],
     fallingBubbles: [] as FallingBubble[],
+    // 벽 하강 애니메이션 상태
+    wallDescentAnimation: {
+      isAnimating: false,
+      startTime: 0,
+      duration: 250, // 0.25초 애니메이션
+      startHeight: 0,
+      targetHeight: 0
+    },
+    // 단일 구름 벽 상태 (이미지 아래쪽 일부가 점점 드러나는 방식)
+    cloudWall: {
+      revealedHeight: 0, // 현재 드러난 높이 (픽셀 단위)
+      maxHeight: 400, // 구름 이미지의 최대 높이
+      isVisible: false, // 벽이 보이는지 여부
+      stepCount: 0 // 내려온 단계 수
+    },
     // 키로 모션 상태
     kiroMotion: {
       type: 'idle' as 'idle' | 'jump' | 'spin' | 'bounce',
@@ -390,6 +407,12 @@ export default function BubbleShooter() {
     state.popParticles = []
     state.fallingBubbles = []
     
+    // 구름 벽 상태 초기화
+    state.cloudWall.revealedHeight = 0
+    state.cloudWall.isVisible = false
+    state.cloudWall.stepCount = 0
+    state.wallDescentAnimation.isAnimating = false
+    
     // React 상태 초기화
     setScore(0)
     setGameRunning(true)
@@ -543,9 +566,9 @@ export default function BubbleShooter() {
   const loadEndingImages = () => {
     const state = gameStateRef.current
     let loadedCount = 0
-    const totalImages = 6 // cloud 이미지 추가로 6개
+    const totalImages = 7 // cloud2 이미지 추가로 7개
     
-    console.log('[DEV] 🖼️ 이미지 로딩 시작 - 총 6개 이미지')
+    console.log('[DEV] 🖼️ 이미지 로딩 시작 - 총 7개 이미지')
     
     const checkAllLoaded = () => {
       loadedCount++
@@ -626,6 +649,18 @@ export default function BubbleShooter() {
     }
     state.cloudImage.onerror = () => {
       console.warn('[DEV] ❌ cloud 이미지 로드 실패')
+      checkAllLoaded()
+    }
+    
+    // 구름2 이미지 (부드러운 애니메이션용)
+    state.cloud2Image = new Image()
+    state.cloud2Image.src = cloud2Image
+    state.cloud2Image.onload = () => {
+      console.log('[DEV] ✅ cloud2.png 로드 성공')
+      checkAllLoaded()
+    }
+    state.cloud2Image.onerror = () => {
+      console.warn('[DEV] ❌ cloud2 이미지 로드 실패')
       checkAllLoaded()
     }
   }
@@ -1076,6 +1111,32 @@ export default function BubbleShooter() {
   const updateAnimations = () => {
     const state = gameStateRef.current
     
+    // 구름 벽 드러나기 애니메이션 업데이트
+    if (state.wallDescentAnimation.isAnimating) {
+      const now = Date.now()
+      const elapsed = now - state.wallDescentAnimation.startTime
+      const progress = Math.min(elapsed / state.wallDescentAnimation.duration, 1)
+      
+      // ease-out 함수 적용 (부드러운 감속)
+      const easedProgress = 1 - Math.pow(1 - progress, 3)
+      
+      // 현재 드러난 높이 계산 (부드럽게 변화)
+      const currentHeight = state.wallDescentAnimation.startHeight + 
+        (state.wallDescentAnimation.targetHeight - state.wallDescentAnimation.startHeight) * easedProgress
+      
+      state.cloudWall.revealedHeight = currentHeight
+      
+      // 애니메이션이 완료되면 정확한 값으로 설정하고 애니메이션 종료
+      if (progress >= 1) {
+        state.cloudWall.revealedHeight = state.wallDescentAnimation.targetHeight
+        state.wallDescentAnimation.isAnimating = false
+        console.log(`[DEV] 🌊 구름 벽 드러나기 애니메이션 완료 - 최종 높이: ${state.cloudWall.revealedHeight.toFixed(1)}px`)
+        
+        // 애니메이션 완료 후 게임오버 체크
+        checkGameOver()
+      }
+    }
+    
     // 터지는 파티클 업데이트
     state.popParticles = state.popParticles.filter(particle => {
       particle.x += particle.dx
@@ -1486,109 +1547,80 @@ export default function BubbleShooter() {
   const pushWallDown = () => {
     const state = gameStateRef.current
     
-    console.log(`[DEV] 🧱 벽 하강 시작 - 구슬들을 수직으로 아래로 밀어내기`)
-    console.log(`[DEV] 🧱 하강 전 상태: 버블 ${state.bubbles.length}개, 오프셋 ${state.boardOffsetRows}`)
-    
-    // 벽 하강 전 구슬 위치 스냅샷 (픽셀 위치 기준)
-    const beforePositions = state.bubbles.map(bubble => {
-      const pos = getBubbleRenderPosition(bubble)
-      return {
-        id: bubble.id,
-        color: bubble.color,
-        gridRow: bubble.gridRow,
-        gridCol: bubble.gridCol,
-        pixelX: Math.round(pos.x),
-        pixelY: Math.round(pos.y)
-      }
-    })
-    
-    // ⚠️ 핵심: 기존 구슬들은 데이터 변경 없이 오프셋으로 아래로 밀어내기
-    // 각 구슬의 gridRow, gridCol은 그대로 유지하고 boardOffsetRows만 증가
-    state.boardOffsetRows += 1
-    
-    console.log(`[DEV] 🧱 보드 오프셋 증가: ${state.boardOffsetRows - 1} → ${state.boardOffsetRows}`)
-    console.log(`[DEV] 🧱 기존 구슬들이 오프셋으로 ${CELL_HEIGHT}px 아래로 이동됨`)
-    
-    // 벽 하강 후 구슬 위치 확인 (픽셀 위치가 정확히 아래로 이동했는지 검증)
-    console.log(`[DEV] 🧱 구슬 위치 이동 검증...`)
-    
-    let correctMoves = 0
-    let positionErrors = 0
-    
-    beforePositions.forEach(before => {
-      const currentBubble = state.bubbles.find(b => b.id === before.id)
-      if (currentBubble) {
-        const afterPos = getBubbleRenderPosition(currentBubble)
-        const expectedX = before.pixelX  // X는 그대로
-        const expectedY = before.pixelY + CELL_HEIGHT  // Y는 CELL_HEIGHT만큼 증가
-        
-        const actualX = Math.round(afterPos.x)
-        const actualY = Math.round(afterPos.y)
-        
-        // X 좌표 확인 (변하지 않아야 함)
-        if (Math.abs(actualX - expectedX) <= 1) {
-          // Y 좌표 확인 (정확히 CELL_HEIGHT만큼 증가해야 함)
-          if (Math.abs(actualY - expectedY) <= 1) {
-            correctMoves++
-          } else {
-            console.warn(`[DEV] ⚠️ Y 이동 오류: ID=${before.id}, 예상Y=${expectedY}, 실제Y=${actualY}`)
-            positionErrors++
-          }
-        } else {
-          console.warn(`[DEV] ⚠️ X 위치 변화: ID=${before.id}, 예상X=${expectedX}, 실제X=${actualX}`)
-          positionErrors++
-        }
-      }
-    })
-    
-    if (positionErrors === 0) {
-      console.log(`[DEV] ✅ 구슬 수직 이동 성공: ${correctMoves}개 구슬이 정확히 아래로 이동`)
-    } else {
-      console.error(`[DEV] 🚨 구슬 이동 오류: ${positionErrors}개 구슬의 위치가 잘못됨`)
+    // 이미 애니메이션 중이면 무시
+    if (state.wallDescentAnimation.isAnimating) {
+      console.log('[DEV] 🧱 구름 벽 애니메이션이 이미 진행 중 - 스킵')
+      return
     }
     
-    // 새로운 최상단 행에 벽 블록들 추가
-    console.log(`[DEV] 🧱 새 벽 블록 행 추가 시작...`)
+    console.log(`[DEV] 🧱 구름 벽 하강 시작`)
+    console.log(`[DEV] 🧱 하강 전 상태: 드러난 높이=${state.cloudWall.revealedHeight}px`)
     
-    // 현재 오프셋을 고려한 최상단 격자 행 계산
+    // 구름 벽이 처음 나타나는 경우
+    if (!state.cloudWall.isVisible) {
+      state.cloudWall.isVisible = true
+      state.cloudWall.revealedHeight = 0
+      state.cloudWall.stepCount = 0
+      console.log('[DEV] 🧱 구름 벽 첫 등장 - 이미지 아래쪽부터 드러나기 시작')
+    }
+    
+    // 애니메이션 설정 (한 칸씩 더 드러나기)
+    const revealStep = CELL_HEIGHT // 버블 한 줄 높이만큼 더 드러남 (34px)
+    
+    state.wallDescentAnimation = {
+      isAnimating: true,
+      startTime: Date.now(),
+      duration: 250, // 0.25초 애니메이션
+      startHeight: state.cloudWall.revealedHeight,
+      targetHeight: Math.min(state.cloudWall.revealedHeight + revealStep, state.cloudWall.maxHeight)
+    }
+    
+    // 단계 수 증가
+    state.cloudWall.stepCount += 1
+    
+    console.log(`[DEV] 🧱 애니메이션 설정: 높이 ${state.wallDescentAnimation.startHeight}px → ${state.wallDescentAnimation.targetHeight}px`)
+    console.log(`[DEV] 🧱 단계: ${state.cloudWall.stepCount}단계, 최대 높이: ${state.cloudWall.maxHeight}px`)
+    
+    // 기존 벽 블록 시스템도 유지 (충돌 판정용)
+    state.boardOffsetRows += 1
+    
+    // 새로운 최상단 행에 벽 블록들 추가 (충돌 판정용)
     const newTopGridRow = -state.boardOffsetRows
     
     let addedCount = 0
     for (let col = 0; col < state.cols; col++) {
-      // 새 행의 오프셋 계산 (실제 렌더링 행 기준)
-      const actualRenderRow = newTopGridRow + state.boardOffsetRows  // 0이 되어야 함
+      const actualRenderRow = newTopGridRow + state.boardOffsetRows
       const offsetX = (actualRenderRow % 2) * ROW_OFFSET_X
       const x = col * CELL_WIDTH + BUBBLE_RADIUS + offsetX
       
       if (x < 500 - BUBBLE_RADIUS) {
         const newWallBlock = assignBubbleId({
-          color: '#666666', // 회색 벽 색상
+          color: '#666666',
           gridRow: newTopGridRow,
           gridCol: col,
-          isWall: true // 벽 블록으로 표시
+          isWall: true
         })
         
         state.bubbles.push(newWallBlock)
         addedCount++
-        
-        if (col < 3) { // 처음 3개만 로그
-          const renderPos = getBubbleRenderPosition(newWallBlock)
-          console.log(`[DEV] 🧱   새 벽 블록: 격자=(${newWallBlock.gridRow}, ${col}), 렌더=(${Math.round(renderPos.x)}, ${Math.round(renderPos.y)})`)
-        }
       }
     }
     
-    console.log(`[DEV] 🧱 새 벽 블록 추가 완료: ${addedCount}개`)
-    console.log(`[DEV] 🧱 벽 하강 완료 - 총 구슬 수: ${state.bubbles.length}개, 오프셋: ${state.boardOffsetRows}`)
-    
-    // 게임오버 체크
-    checkGameOver()
+    console.log(`[DEV] 🧱 새 벽 블록 추가 완료: ${addedCount}개 (충돌 판정용)`)
+    console.log(`[DEV] 🧱 구름 벽 드러나기 애니메이션 시작됨 - 0.25초 후 완료 예정`)
   }
 
 
 
   const checkGameOver = () => {
     const state = gameStateRef.current
+    
+    // 구름 벽이 게임오버 라인에 도달했는지 체크
+    if (state.cloudWall.isVisible && state.cloudWall.revealedHeight >= SHOOTER_LINE_Y) {
+      console.log(`[DEV] 🎯 게임오버 감지: 구름 벽 높이=${Math.round(state.cloudWall.revealedHeight)}, 구슬라인Y=${SHOOTER_LINE_Y}`)
+      triggerGameOver()
+      return
+    }
     
     // 버블이 구슬라인에 닿거나 침범했는지 체크
     for (let bubble of state.bubbles) {
@@ -1703,31 +1735,14 @@ export default function BubbleShooter() {
     // 화면 지우기 (투명하게)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     
-    // 배경 버블들과 벽 그리기
-    const wallRows = new Set<number>()
-    const normalBubbles: Bubble[] = []
-    
-    // 벽 행과 일반 버블 분리
-    for (let bubble of state.bubbles) {
-      if (bubble.isWall) {
-        wallRows.add(bubble.gridRow + state.boardOffsetRows) // 렌더링 행 기준
-      } else {
-        normalBubbles.push(bubble)
-      }
-    }
-    
-    // 벽 행들을 연속된 벽으로 그리기
-    for (let wallRow of wallRows) {
-      drawWallRow(ctx, wallRow)
-    }
-    
-    // 일반 버블들 그리기
+    // 1. 일반 버블들 그리기 (가장 아래 레이어)
+    const normalBubbles = state.bubbles.filter(bubble => !bubble.isWall)
     for (let bubble of normalBubbles) {
       const bubblePos = getBubbleRenderPosition(bubble)
       drawBubble(ctx, bubblePos.x, bubblePos.y, bubble.color)
     }
     
-    // 떨어지는 버블들 그리기
+    // 2. 떨어지는 버블들 그리기
     for (let falling of state.fallingBubbles) {
       ctx.save()
       ctx.translate(falling.x, falling.y)
@@ -1737,12 +1752,12 @@ export default function BubbleShooter() {
       ctx.restore()
     }
     
-    // 현재 버블 그리기
+    // 3. 현재 버블 그리기
     if (state.currentBubble) {
       drawBubble(ctx, state.currentBubble.x, state.currentBubble.y, state.currentBubble.color)
     }
     
-    // 터지는 파티클들 그리기
+    // 4. 터지는 파티클들 그리기
     for (let particle of state.popParticles) {
       const alpha = particle.life / particle.maxLife
       ctx.globalAlpha = alpha
@@ -1753,12 +1768,17 @@ export default function BubbleShooter() {
     }
     ctx.globalAlpha = 1.0
     
-    // 조준선 그리기 (게임 진행 중일 때만)
+    // 5. 구름 벽 그리기 (버블들 위에, UI 아래)
+    if (state.cloudWall.isVisible) {
+      drawCloudWall(ctx, canvas)
+    }
+    
+    // 6. 조준선 그리기 (게임 진행 중일 때만)
     if (gameRunning && !gameOver && !state.currentBubble?.moving && state.trajectory) {
       drawTrajectory(ctx)
     }
     
-    // 다음 버블 미리보기
+    // 7. 다음 버블 미리보기 (UI 레이어)
     if (state.nextBubble) {
       ctx.fillStyle = '#fff'
       ctx.font = '12px Arial'
@@ -1766,16 +1786,82 @@ export default function BubbleShooter() {
       drawBubble(ctx, canvas.width - 35, canvas.height - 35, state.nextBubble.color)
     }
     
-    // 구슬라인 그리기 (시각적 참조용)
+    // 8. 구슬라인 그리기 (시각적 참조용)
     drawShooterLine(ctx, canvas)
     
-    // 슈터 키로 그리기
+    // 9. 슈터 키로 그리기
     drawShooterKiro(ctx)
     
-    // 게임 종료 상태 표시
+    // 10. 게임 종료 상태 표시 (최상위 레이어)
     if (!gameRunning) {
       showGameEnd(ctx, canvas)
     }
+  }
+
+  const drawCloudWall = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const state = gameStateRef.current
+    
+    // cloud2 이미지가 로드되었는지 확인
+    if (!state.cloud2Image || !state.endingImagesLoaded) {
+      console.log('[DEV] 🌫️ 구름2 이미지 미로드, 기본 구름 벽 사용')
+      drawDefaultCloudWall(ctx, canvas)
+      return
+    }
+    
+    // cloud2 이미지의 아래쪽 일부만 그리기
+    const canvasWidth = canvas.width
+    const revealedHeight = state.cloudWall.revealedHeight
+    
+    if (revealedHeight <= 0) return // 아직 드러날 부분이 없으면 그리지 않음
+    
+    // 이미지의 원본 크기
+    const imageWidth = state.cloud2Image.width
+    const imageHeight = state.cloud2Image.height
+    
+    // 화면 너비에 맞게 스케일 조정
+    const scaleX = canvasWidth / imageWidth
+    const scale = scaleX // 가로 비율에 맞춤
+    
+    const scaledWidth = imageWidth * scale
+    
+    // 중앙 정렬을 위한 오프셋
+    const offsetX = (canvasWidth - scaledWidth) / 2
+    
+    // 이미지의 아래쪽 일부만 잘라서 그리기
+    const sourceY = imageHeight - (revealedHeight / scale) // 이미지에서 잘라낼 Y 시작점
+    const sourceHeight = revealedHeight / scale // 이미지에서 잘라낼 높이
+    
+    // 화면 상단에 그리기
+    const destY = 0
+    const destHeight = revealedHeight
+    
+    console.log(`[DEV] 🌤️ 구름 벽 일부 그리기: 드러난높이=${revealedHeight.toFixed(1)}px`)
+    console.log(`[DEV] 🌤️   소스: Y=${sourceY.toFixed(1)}, H=${sourceHeight.toFixed(1)}`)
+    console.log(`[DEV] 🌤️   대상: Y=${destY}, H=${destHeight.toFixed(1)}`)
+    
+    // 이미지의 아래쪽 일부를 화면 상단에 그리기
+    ctx.drawImage(
+      state.cloud2Image,
+      0, sourceY, imageWidth, sourceHeight, // 소스 영역 (이미지의 아래쪽 일부)
+      offsetX, destY, scaledWidth, destHeight // 대상 영역 (화면 상단)
+    )
+  }
+  
+  const drawDefaultCloudWall = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const state = gameStateRef.current
+    
+    // 기본 그라데이션 구름 벽
+    const revealedHeight = state.cloudWall.revealedHeight
+    if (revealedHeight <= 0) return
+    
+    const gradient = ctx.createLinearGradient(0, 0, 0, revealedHeight)
+    gradient.addColorStop(0, '#8a8a8a')
+    gradient.addColorStop(0.3, '#6a6a6a')
+    gradient.addColorStop(0.7, '#4a4a4a')
+    gradient.addColorStop(1, '#3a3a3a')
+    
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, canvas.width, revealedHeight)
   }
 
   const drawBubble = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string) => {
@@ -1848,24 +1934,83 @@ export default function BubbleShooter() {
     ctx.stroke()
   }
 
+  const drawScrollingBackground = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const state = gameStateRef.current
+    
+    // cloud2 이미지가 로드되었는지 확인
+    if (!state.cloud2Image || !state.endingImagesLoaded) {
+      console.log('[DEV] 🌫️ 구름2 이미지 미로드, 기본 배경 사용')
+      drawDefaultScrollingBackground(ctx, canvas)
+      return
+    }
+    
+    // 전체 화면을 덮을 수 있는 큰 배경 그리기
+    const canvasWidth = canvas.width
+    const canvasHeight = canvas.height
+    
+    // 이미지의 원본 크기
+    const imageWidth = state.cloud2Image.width
+    const imageHeight = state.cloud2Image.height
+    
+    // 화면을 완전히 덮기 위한 스케일 계산
+    const scaleX = canvasWidth / imageWidth
+    const scaleY = canvasHeight / imageHeight
+    const scale = Math.max(scaleX, scaleY) // 화면을 완전히 덮도록
+    
+    const scaledWidth = imageWidth * scale
+    const scaledHeight = imageHeight * scale
+    
+    // 스크롤 오프셋 적용 (애니메이션 중에는 backgroundScrollY 사용)
+    const totalScrollY = (state.boardOffsetRows * CELL_HEIGHT) + state.backgroundScrollY
+    
+    // 이미지를 반복해서 그리기 (무한 스크롤 효과)
+    const repeatY = scaledHeight
+    const startY = -(totalScrollY % repeatY)
+    
+    console.log(`[DEV] 🌤️ 스크롤링 배경 그리기: 스크롤Y=${totalScrollY.toFixed(1)}, 시작Y=${startY.toFixed(1)}`)
+    
+    // 화면을 덮을 만큼 이미지를 반복 그리기
+    for (let y = startY; y < canvasHeight + repeatY; y += repeatY) {
+      ctx.drawImage(
+        state.cloud2Image,
+        0, y,
+        scaledWidth, scaledHeight
+      )
+    }
+  }
+  
+  const drawDefaultScrollingBackground = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const state = gameStateRef.current
+    
+    // 기본 그라데이션 배경
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height)
+    gradient.addColorStop(0, '#8a8a8a')
+    gradient.addColorStop(0.3, '#6a6a6a')
+    gradient.addColorStop(0.7, '#4a4a4a')
+    gradient.addColorStop(1, '#3a3a3a')
+    
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
+
   const drawWallRow = (ctx: CanvasRenderingContext2D, renderRow: number) => {
     const state = gameStateRef.current
     const y = renderRow * CELL_HEIGHT + BUBBLE_RADIUS
-    const height = CELL_HEIGHT // 기존 높이로 복원
+    const height = CELL_HEIGHT * 2 // 높이를 2배로 늘림
     const width = 500 // 전체 캔버스 너비
     
-    // cloud 이미지가 로드되었으면 이미지 사용, 아니면 기본 회색 배경
-    if (state.cloudImage && state.endingImagesLoaded) {
-      // cloud 이미지를 전체 너비로 늘려서 그리기
+    // cloud2 이미지가 로드되었으면 이미지 사용, 아니면 기본 회색 배경
+    if (state.cloud2Image && state.endingImagesLoaded) {
+      // cloud2 이미지를 전체 너비로 늘려서 그리기
       ctx.drawImage(
-        state.cloudImage,
+        state.cloud2Image,
         0, y - height/2,
         width, height // 전체 너비와 늘어난 높이로 그리기
       )
       
-      console.log(`[DEV] 🌤️ 구름 이미지 늘려서 그리기: 위치 y=${y}, 크기=${width}x${height}`)
+      console.log(`[DEV] 🌤️ 구름2 이미지 늘려서 그리기: 위치 y=${y}, 크기=${width}x${height}`)
     } else {
-      console.log('[DEV] 🌫️ 구름 이미지 미로드, 기본 벽 사용')
+      console.log('[DEV] 🌫️ 구름2 이미지 미로드, 기본 벽 사용')
       drawDefaultWall(ctx, y, height, width)
     }
   }
@@ -2099,7 +2244,7 @@ export default function BubbleShooter() {
             gap: '20px',
             alignItems: 'center',
             zIndex: 2,
-            marginTop: '200px' // 화면 하단에 배치
+            marginTop: '350px' // 버튼을 더 아래로 이동
           }}>
             <button
               onClick={startNewGame}
@@ -2107,8 +2252,8 @@ export default function BubbleShooter() {
                 background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7))',
                 color: '#4a5568',
                 border: '2px solid rgba(255, 255, 255, 0.8)',
-                padding: '20px 60px',
-                fontSize: '24px',
+                padding: '18px 55px', // 패딩을 통일
+                fontSize: '20px', // 폰트 크기 통일
                 fontWeight: '700',
                 fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
                 borderRadius: '50px',
@@ -2118,7 +2263,8 @@ export default function BubbleShooter() {
                 textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 letterSpacing: '1px',
                 backdropFilter: 'blur(10px)',
-                minWidth: '200px'
+                minWidth: '220px', // 최소 너비 통일
+                height: '60px' // 높이 통일
               }}
               onMouseOver={(e) => {
                 e.currentTarget.style.transform = 'translateY(-3px) scale(1.05)'
@@ -2140,8 +2286,8 @@ export default function BubbleShooter() {
                 background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.5))',
                 color: '#4a5568',
                 border: '2px solid rgba(255, 255, 255, 0.6)',
-                padding: '16px 50px',
-                fontSize: '18px',
+                padding: '18px 55px', // 패딩을 통일
+                fontSize: '20px', // 폰트 크기 통일
                 fontWeight: '600',
                 fontFamily: '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
                 borderRadius: '50px',
@@ -2151,7 +2297,8 @@ export default function BubbleShooter() {
                 textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
                 letterSpacing: '0.5px',
                 backdropFilter: 'blur(10px)',
-                minWidth: '200px'
+                minWidth: '220px', // 최소 너비 통일
+                height: '60px' // 높이 통일
               }}
               onMouseOver={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'
