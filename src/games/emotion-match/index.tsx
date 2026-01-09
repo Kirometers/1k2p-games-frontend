@@ -1,24 +1,6 @@
 import { useState, useEffect, useCallback, useReducer, useRef } from 'react'
 import './styles.css'
 
-// 이미지 직접 import
-import blackFrightened from './re_black_frightened.png'
-import blueSad from './re_blue_sad.png'
-import greenDisgust from './re_green_disgust.png'
-import greyLove from './re_grey_love.png'
-import orangeShy from './re_orange_shy.png'
-import pinkHappy from './re_pink_happy.png'
-import purpleEnvy from './re_purple_envy.png'
-import redAngry from './re_red_angry.png'
-import whiteSmile from './re_white_smile.png'
-import yellowFrightened from './re_yellow_frightened.png'
-
-// 배경 이미지 import
-import mainPageNo from './main_page_no.png'
-import backgroundMorning from './background_morning.png'
-import backgroundEvening from './background_evening.png'
-import backgroundNight from './background_night.png'
-
 // Types
 type BlockType = string
 type Position = { row: number; col: number }
@@ -72,19 +54,25 @@ const ALL_CHARACTERS = [
   'yellow_frightened'
 ]
 
-// 이미지 매핑 객체
+// 이미지 경로 - public 폴더 기준
 const CHARACTER_IMAGES: Record<string, string> = {
-  'black_frightened': blackFrightened,
-  'blue_sad': blueSad,
-  'green_disgust': greenDisgust,
-  'grey_love': greyLove,
-  'orange_shy': orangeShy,
-  'pink_happy': pinkHappy,
-  'purple_envy': purpleEnvy,
-  'red_angry': redAngry,
-  'white_smile': whiteSmile,
-  'yellow_frightened': yellowFrightened,
+  'black_frightened': '/games/emotion-match/re_black_frightened.png',
+  'blue_sad': '/games/emotion-match/re_blue_sad.png',
+  'green_disgust': '/games/emotion-match/re_green_disgust.png',
+  'grey_love': '/games/emotion-match/re_grey_love.png',
+  'orange_shy': '/games/emotion-match/re_orange_shy.png',
+  'pink_happy': '/games/emotion-match/re_pink_happy.png',
+  'purple_envy': '/games/emotion-match/re_purple_envy.png',
+  'red_angry': '/games/emotion-match/re_red_angry.png',
+  'white_smile': '/games/emotion-match/re_white_smile.png',
+  'yellow_frightened': '/games/emotion-match/re_yellow_frightened.png',
 }
+
+// 배경 이미지 경로
+const mainPageNo = '/games/emotion-match/main_page_no.png'
+const backgroundMorning = '/games/emotion-match/background_morning.png'
+const backgroundEvening = '/games/emotion-match/background_evening.png'
+const backgroundNight = '/games/emotion-match/background_night.png'
 
 // 이미지 경로 함수
 const getCharacterImage = (character: string) => {
