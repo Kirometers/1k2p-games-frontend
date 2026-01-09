@@ -54,6 +54,17 @@ const ALL_CHARACTERS = [
   'yellow_frightened'
 ]
 
+// 이미지 경로 함수 (프로덕션 환경 대응)
+const getCharacterImage = (character: string) => {
+  try {
+    // 동적 import 시도
+    return new URL(`./re_${character}.png`, import.meta.url).href
+  } catch {
+    // 폴백: 절대 경로
+    return `/src/games/emotion-match/re_${character}.png`
+  }
+}
+
 // Game reducer
 type GameAction = 
   | { type: 'SET_STATE'; payload: GameState }
@@ -1111,7 +1122,7 @@ export default function EmotionMatch() {
                   >
                     <div className="character-glow"></div>
                     <img 
-                      src={`/src/games/emotion-match/re_${character}.png`}
+                      src={getCharacterImage(character)}
                       alt={character}
                       className="character-image"
                     />
@@ -1243,7 +1254,7 @@ export default function EmotionMatch() {
                         }}
                       >
                         <img 
-                          src={`/src/games/emotion-match/re_${block.type}.png`}
+                          src={getCharacterImage(block.type)}
                           alt={block.type}
                           className="block-image"
                           draggable={false}
