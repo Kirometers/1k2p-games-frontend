@@ -22,6 +22,7 @@ import {
   type GameStatus,
   type Locale,
 } from './games/registry'
+import { AdBanner } from './components/AdBanner'
 
 const statusMap: Record<GameStatus, 'success' | 'info' | 'pending'> = {
   open: 'success',
@@ -292,6 +293,9 @@ function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: 
           }
         >
           <SpaceBetween size="l">
+            {/* 상단 배너 광고 */}
+            <AdBanner adSlot="1234567890" adFormat="horizontal" />
+
             <Container
               header={<Header variant="h2" description={t.cardsDescription}>{t.cardsTitle}</Header>}
             >
@@ -407,6 +411,9 @@ function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: 
               />
             </Container>
 
+            {/* 중간 배너 광고 */}
+            <AdBanner adSlot="0987654321" adFormat="auto" />
+
             <Container id="creators" header={<Header variant="h2">{t.creatorsTitle}</Header>}>
               <SpaceBetween size="l">
                 <Box>{t.creatorsBody}</Box>
@@ -444,6 +451,9 @@ function HubPage({ navigation, navigationOpen, onNavigationChange, locale, t }: 
                 </ul>
               </SpaceBetween>
             </Container>
+
+            {/* 하단 배너 광고 */}
+            <AdBanner adSlot="1122334455" adFormat="horizontal" />
           </SpaceBetween>
         </ContentLayout>
       }
@@ -478,21 +488,29 @@ function GamePage({ navigation, navigationOpen, onNavigationChange, locale, t }:
             </SpaceBetween>
           }
         >
-          <Container>
-            {game && GameComponent ? (
-              <Suspense
-                fallback={
-                  <StatusIndicator type="loading">{t.loadingGame}</StatusIndicator>
-                }
-              >
-                <GameComponent />
-              </Suspense>
-            ) : (
-              <Box color="text-body-secondary">
-                {t.missingGameEntry} <code>src/games/{gameId}/index.tsx</code>.
-              </Box>
-            )}
-          </Container>
+          <SpaceBetween size="l">
+            {/* 게임 페이지 상단 광고 */}
+            <AdBanner adSlot="5544332211" adFormat="horizontal" />
+
+            <Container>
+              {game && GameComponent ? (
+                <Suspense
+                  fallback={
+                    <StatusIndicator type="loading">{t.loadingGame}</StatusIndicator>
+                  }
+                >
+                  <GameComponent />
+                </Suspense>
+              ) : (
+                <Box color="text-body-secondary">
+                  {t.missingGameEntry} <code>src/games/{gameId}/index.tsx</code>.
+                </Box>
+              )}
+            </Container>
+
+            {/* 게임 페이지 하단 광고 */}
+            <AdBanner adSlot="6677889900" adFormat="horizontal" />
+          </SpaceBetween>
         </ContentLayout>
       }
       toolsHide
