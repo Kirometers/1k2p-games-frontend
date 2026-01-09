@@ -1681,15 +1681,13 @@ export default function BubbleShooter() {
     
     // 시작화면이나 튜토리얼 화면일 때는 게임 요소를 그리지 않음
     if (gameState === 'start' || gameState === 'tutorial') {
-      // 검은 배경만 그리기
-      ctx.fillStyle = '#000'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      // 투명한 배경으로 지우기
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
       return
     }
     
-    // 화면 지우기
-    ctx.fillStyle = '#000'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    // 화면 지우기 (투명하게)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
     
     // 배경 버블들과 벽 그리기
     const wallRows = new Set<number>()
@@ -2054,7 +2052,7 @@ export default function BubbleShooter() {
   return (
     <div style={{ 
       background: gameState === 'playing' 
-        ? `url(${backgroundImage}) center/cover no-repeat` 
+        ? `url(${backgroundImage}) center/contain no-repeat` 
         : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       minHeight: '100vh',
       display: 'flex',
@@ -2282,10 +2280,9 @@ export default function BubbleShooter() {
       {gameState === 'playing' && (
       <div style={{
         textAlign: 'center',
-        background: 'rgba(255, 255, 255, 0.1)',
+        background: 'rgba(255, 255, 255, 0.3)',
         padding: '15px',
         borderRadius: '15px',
-        backdropFilter: 'blur(10px)',
         position: 'relative'
       }}>
         <SpaceBetween size="s">
@@ -2326,15 +2323,6 @@ export default function BubbleShooter() {
               }}
             />
           </div>
-          
-          <Box color="text-body-secondary" textAlign="center">
-            <div style={{ color: 'white', fontSize: '13px' }}>
-              마우스로 조준하고 클릭해서 버블을 쏘세요! 🎯<br />
-              같은 색깔 3개 이상을 맞춰서 터뜨리세요! ✨<br />
-              30초마다 벽이 내려옵니다!<br />
-              <span style={{ color: '#ffff00' }}>⚠️ 버블이 노란 구슬라인을 넘으면 게임오버!</span>
-            </div>
-          </Box>
         </SpaceBetween>
       </div>
       )}
